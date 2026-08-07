@@ -10,6 +10,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -22,7 +26,7 @@ import kotlinx.coroutines.delay
 
 /**
  * SplashScreen - Logo Opening with Soft Spring Animation
- * Premium entrance experience for PlayTime
+ * Premium entrance experience for Audia Player
  */
 @Composable
 fun SplashScreen(
@@ -70,9 +74,9 @@ fun SplashScreen(
     // Trigger animations
     LaunchedEffect(Unit) {
         startAnimation = true
-        delay(2500) // Show splash for 2.5 seconds
+        delay(800) // Fast Launch: 0.8 seconds
         showContent = false
-        delay(500) // Wait for fade out
+        delay(200) // Quick fade out
         onSplashComplete()
     }
 
@@ -88,23 +92,27 @@ fun SplashScreen(
             verticalArrangement = Arrangement.Center
         ) {
             // Logo with scale and pulse
+            // Logo with scale and pulse
             Image(
-                painter = painterResource(id = R.drawable.logo),
-                contentDescription = "PlayTime Logo",
+                painter = painterResource(id = R.drawable.audia_player),
+                contentDescription = "Audia Player Logo",
+                contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(150.dp)
+                    .size(180.dp) // Slightly larger
                     .scale(scale * pulse)
                     .alpha(alpha)
+                    .clip(CircleShape) // Circular Clip
+                    .border(2.dp, SoftGold.copy(alpha = 0.5f), CircleShape) // Optional: Gold border for premium feel
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             // App Name
             Text(
-                text = "PlayTime",
+                text = "Audia Player",
                 fontFamily = OutfitFontFamily,
                 fontWeight = FontWeight.Bold,
-                fontSize = 36.sp,
+                fontSize = 42.sp, // Larger text
                 color = Color.White,
                 modifier = Modifier.alpha(alpha)
             )

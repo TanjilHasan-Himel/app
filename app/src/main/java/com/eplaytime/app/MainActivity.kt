@@ -14,18 +14,32 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.eplaytime.app.ui.screens.HomeScreen
 import com.eplaytime.app.ui.screens.SplashScreen
+import com.eplaytime.app.ui.theme.BlackBackground
+import com.eplaytime.app.ui.theme.OutfitFontFamily
+import com.eplaytime.app.ui.theme.SoftGold
 import com.eplaytime.app.ui.theme.PlayTimeTheme
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.navigation.compose.NavHost
@@ -33,6 +47,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.eplaytime.app.ui.viewmodel.MusicViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.delay
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -50,17 +65,8 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {
-            // LAYER 1: THE "GOD" BRAIN
-            // Initialize ONCE inside setContent
-            val sharedViewModel: MusicViewModel = hiltViewModel()
-            
-            // Track Usage on Start
-            LaunchedEffect(Unit) {
-                 sharedViewModel.updateLastOpenedTime()
-            }
-            
             PlayTimeTheme {
-                MainScreen(sharedViewModel = sharedViewModel)
+                MainScreen()
             }
         }
     }
@@ -68,6 +74,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         scheduleEngagementWorker()
+        scheduleRecommendationWorker()
     }
 
     private fun scheduleEngagementWorker() {
@@ -82,12 +89,24 @@ class MainActivity : ComponentActivity() {
             workRequest
         )
     }
+
+    private fun scheduleRecommendationWorker() {
+        // Schedule recommendations every 3 hours
+        val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.eplaytime.app.worker.SongRecommendationWorker>(
+            3, java.util.concurrent.TimeUnit.HOURS
+        ).build()
+
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "song_recommendation_worker",
+            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+    }
 }
 
 @Composable
 fun MainScreen(
-    modifier: Modifier = Modifier,
-    sharedViewModel: MusicViewModel
+    modifier: Modifier = Modifier
 ) {
     var showSplash by remember { mutableStateOf(true) }
 
@@ -96,13 +115,52 @@ fun MainScreen(
             onSplashComplete = { showSplash = false }
         )
     } else {
-        MainNavigation(sharedViewModel)
+        MainNavigation()
     }
 }
 
 @Composable
-private fun MainNavigation(sharedViewModel: MusicViewModel) {
+private fun MainNavigation() {
     val navController = rememberNavController()
+    var isViewModelReady by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        // Keep first frame lightweight on cold start/reboot before loading heavy media state.
+        delay(250)
+        isViewModelReady = true
+    }
+
+    if (!isViewModelReady) {
+        Scaffold(modifier = Modifier.fillMaxSize()) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(BlackBackground)
+                    .padding(paddingValues),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator(
+                    color = SoftGold,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.clip(CircleShape)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Loading your music...",
+                    color = Color.White,
+                    fontFamily = OutfitFontFamily
+                )
+            }
+        }
+        return
+    }
+
+    val sharedViewModel: MusicViewModel = hiltViewModel()
+
+    LaunchedEffect(Unit) {
+        sharedViewModel.updateLastOpenedTime()
+    }
 
     NavHost(
         navController = navController,

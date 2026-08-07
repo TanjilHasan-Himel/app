@@ -5,13 +5,20 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,13 +30,20 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -41,13 +55,16 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.eplaytime.app.R
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.ui.res.painterResource
 import com.eplaytime.app.data.model.Song
 import com.eplaytime.app.data.repository.Album
 import com.eplaytime.app.data.repository.Artist
 import com.eplaytime.app.data.repository.MusicFolder
 import com.eplaytime.app.ui.components.MiniPlayer
 import com.eplaytime.app.ui.components.SongList
-import com.eplaytime.app.ui.components.WelcomeDialog
+import com.eplaytime.app.ui.screens.OnboardingScreen
 import com.eplaytime.app.ui.theme.*
 import com.eplaytime.app.ui.viewmodel.MusicViewModel
 import java.util.Calendar
@@ -64,7 +81,12 @@ import kotlinx.coroutines.launch
  * - Glass header with greeting
  * - Scan/Refresh button
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.foundation.ExperimentalFoundationApi
+
+private val BrandGlowColor = Color(0xFFFF5A5F)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     viewModel: MusicViewModel,
@@ -98,12 +120,9 @@ fun HomeScreen(
         }
     }
     
-    // Request permission on first launch
-    LaunchedEffect(Unit) {
-        if (!hasPermission) {
-            permissionLauncher.launch(audioPermission)
-        } else {
-            // Already have permission, load songs
+    // Only load songs when we already have permission; do not auto-request permission.
+    LaunchedEffect(hasPermission) {
+        if (hasPermission) {
             viewModel.loadLocalSongs()
         }
     }
@@ -167,29 +186,58 @@ fun HomeScreen(
     val isPlaying by viewModel.isPlaying.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val allFavorites by viewModel.allFavorites.collectAsState(initial = emptyList())
+    val recentPlayedSongs by viewModel.recentPlayedSongs.collectAsState()
+    val mostPlayedSongs by viewModel.mostPlayedSongs.collectAsState()
     val isShortAudioHidden by viewModel.isShortAudioHidden.collectAsState()
     val isCallRecordingHidden by viewModel.isCallRecordingHidden.collectAsState()
     val hasNewSongs by viewModel.hasNewSongs.collectAsState()
     val userName by viewModel.userName.collectAsState()
 
     var showSettingsDialog by remember { mutableStateOf(false) }
-    var showWelcomeDialog by remember { mutableStateOf(false) }
-    
-    // Show Welcome Dialog if name is missing (and not already shown)
-    LaunchedEffect(userName) {
-         if (userName == null) {
-             showWelcomeDialog = true
-         }
-    }
+    val hasSeenOnboarding by viewModel.hasSeenOnboarding.collectAsState()
 
     var searchQuery by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(""))
+    }
+    var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // Auto-focus logic
+    LaunchedEffect(isSearchExpanded) {
+        if (isSearchExpanded) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        } else {
+            keyboardController?.hide()
+        }
+    }
+
+    // Handle Back Press to close search
+    BackHandler(enabled = isSearchExpanded) {
+        isSearchExpanded = false
+        searchQuery = TextFieldValue("")
     }
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
 
     val tabs = listOf("Tracks", "Folders", "Albums", "Artists", "Favorites")
 
-    val filteredSongs = remember(songList, searchQuery.text, selectedTabIndex, allFavorites) {
+    val recentAddedSongs = remember(songList) {
+        val visibleSongs = songList.filterNot { song -> isSongFromHiddenFolder(song) }
+        val withDate = visibleSongs.filter { it.dateAdded > 0L }
+        if (withDate.isNotEmpty()) {
+            withDate.sortedByDescending { it.dateAdded }
+        } else {
+            visibleSongs
+        }
+    }
+
+    val filteredSongs = remember(
+        songList,
+        searchQuery.text,
+        selectedTabIndex,
+        allFavorites
+    ) {
         val query = searchQuery.text.trim().lowercase(Locale.US)
         val baseList = when (selectedTabIndex) {
             4 -> songList.filter { song -> allFavorites.any { it.uri == song.uri } } // Favorites from DB
@@ -201,6 +249,119 @@ fun HomeScreen(
                 song.artist.lowercase(Locale.US).contains(query) ||
                 song.album.lowercase(Locale.US).contains(query)
         }
+    }
+
+    // --- Cinematic Cold Start Logic ---
+    var isColdStart by rememberSaveable { mutableStateOf(true) }
+    
+    // Feature: Swipe Down to Restore Hero Plate
+    // Logic: If list is at top and user swipes down, bring back the Cold Start plate
+    val nestedScrollConnection = remember {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: androidx.compose.ui.input.nestedscroll.NestedScrollSource
+            ): Offset {
+                // If we have available 'y' scroll (meaning list is at top/bottom boundary)
+                // and it's positive (pulling down)
+                if (available.y > 0 && source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.Drag) {
+                    // Threshold to trigger (e.g. 100px)
+                    if (available.y > 50f) { // Sensitive trigger
+                         isColdStart = true
+                         return available // Consume it so we don't trigger other refreshers if any
+                    }
+                }
+                return super.onPostScroll(consumed, available, source)
+            }
+        }
+    }
+
+    val transition = updateTransition(targetState = isColdStart, label = "cold_start")
+
+    // Animation A: Hero Plate Slide UP (Exit)
+    val plateOffsetY by transition.animateDp(
+        transitionSpec = { tween(durationMillis = 800, easing = LinearOutSlowInEasing) },
+        label = "plate_exit"
+    ) { state ->
+        if (state) 0.dp else (-1000).dp // Move off screen
+    }
+
+    // Animation B: Header Icons Slide DOWN (Entry)
+    val iconEnterSpec = tween<Dp>(durationMillis = 600, easing = FastOutSlowInEasing)
+    
+    val searchIconOffset by transition.animateDp(
+        transitionSpec = { if (targetState) snap() else iconEnterSpec },
+        label = "icon_search"
+    ) { state -> if (state) (-100).dp else 0.dp }
+
+    val refreshIconOffset by transition.animateDp(
+        transitionSpec = { if (targetState) snap() else tween(durationMillis = 600, delayMillis = 100, easing = FastOutSlowInEasing) },
+        label = "icon_refresh"
+    ) { state -> if (state) (-100).dp else 0.dp }
+
+    val otherIconsOffset by transition.animateDp(
+        transitionSpec = { if (targetState) snap() else tween(durationMillis = 600, delayMillis = 200, easing = FastOutSlowInEasing) },
+        label = "icon_others"
+    ) { state -> if (state) (-100).dp else 0.dp }
+
+    // Animation C: Main Content Slide UP (Entry)
+    val contentOffsetY by transition.animateDp(
+        transitionSpec = { tween(durationMillis = 800, delayMillis = 100, easing = EaseOutCubic) },
+        label = "content_enter"
+    ) { state ->
+        if (state) 150.dp else 0.dp
+    }
+    
+    val contentAlpha by transition.animateFloat(
+        transitionSpec = { tween(durationMillis = 800, delayMillis = 100) },
+        label = "content_alpha"
+    ) { state ->
+        if (state) 0f else 1f
+    }
+    
+    // Dynamic Greeting Logic (Lifted for Hero Plate access)
+    val greeting = remember(userName) {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val timeGreeting = when (hour) {
+            in 4..4 -> "Still Awake?"
+            in 5..7 -> "Early Morning"
+            in 8..11 -> "Good Morning"
+            in 12..13 -> "Good Noon"
+            in 14..16 -> "Good Afternoon"
+            in 17..18 -> "Good Evening"
+            in 19..21 -> "Calm Evening"
+            in 22..23 -> "Good Night"
+            else -> "Midnight Focus"
+        }
+        if (userName != null) "$timeGreeting, $userName!" else "$timeGreeting!"
+    }
+
+
+    // --- Cinematic Cold Start Logic ---
+
+
+
+    // Animation B: Header Icons Slide DOWN (Entry)
+
+
+    // Animation C: Main Content Slide UP (Entry)
+
+
+
+    if (hasSeenOnboarding == null) {
+        // Wait for DataStore to load
+        return
+    }
+
+    if (hasSeenOnboarding == false) {
+        OnboardingScreen(
+            onComplete = { name ->
+                viewModel.setUserName(name)
+                viewModel.setHasSeenOnboarding(true)
+            }
+        )
+        return
     }
 
     Scaffold(
@@ -232,21 +393,108 @@ fun HomeScreen(
             }
         }
     ) { paddingValues ->
+        Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .nestedScroll(nestedScrollConnection)
+                .graphicsLayer { 
+                    translationY = contentOffsetY.toPx() 
+                    alpha = contentAlpha
+                }
                 .padding(top = paddingValues.calculateTopPadding())
         ) {
-            // Glass Header with Greeting
-            GlassHeader(
-                onSchedulerClick = onNavigateToScheduler,
-                onAboutClick = onNavigateToAbout,
-                onSettingsClick = { showSettingsDialog = true },
-                onRefreshClick = { viewModel.rescanDevice() },
-                isLoading = isLoading,
-                hasNewSongs = hasNewSongs,
-                userName = userName
-            )
+            // Collapsible Header & Search
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize()
+            ) {
+                // COLLAPSED STATE: Header with Icons
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !isSearchExpanded,
+                    enter = fadeIn() + slideInVertically(),
+                    exit = fadeOut() + slideOutVertically()
+                ) {
+                    GlassHeader(
+                        onSchedulerClick = onNavigateToScheduler,
+                        onAboutClick = onNavigateToAbout,
+                        onSettingsClick = { showSettingsDialog = true },
+                        onRefreshClick = { viewModel.rescanDevice() },
+                        isLoading = isLoading,
+                        hasNewSongs = hasNewSongs,
+                        userName = userName,
+                        onSearchClick = { isSearchExpanded = true },
+                        searchIconOffset = searchIconOffset,
+                        refreshIconOffset = refreshIconOffset,
+                        otherIconsOffset = otherIconsOffset
+                    )
+                }
+
+                // EXPANDED STATE: Full Search Bar
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = isSearchExpanded,
+                    enter = fadeIn() + slideInHorizontally(),
+                    exit = fadeOut() + slideOutHorizontally()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 24.dp), 
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = {
+                            isSearchExpanded = false
+                            searchQuery = TextFieldValue("")
+                            // viewModel.updateSearchQuery("") // If needed, but local state drives filter currently or we need to check usage
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Back",
+                                tint = SoftGold
+                            )
+                        }
+                        
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequester),
+                            placeholder = {
+                                Text(
+                                    "Search songs, artists...",
+                                    fontFamily = OutfitFontFamily,
+                                    fontWeight = FontWeight.Light,
+                                    color = TextSecondary.copy(alpha = 0.7f)
+                                )
+                            },
+                            trailingIcon = {
+                                if (searchQuery.text.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = TextFieldValue("") }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Clear,
+                                            contentDescription = "Clear",
+                                            tint = TextSecondary
+                                        )
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = SoftGold,
+                                unfocusedBorderColor = GlassBorder,
+                                cursorColor = SoftGold,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedContainerColor = BlackSurface,
+                                unfocusedContainerColor = BlackSurface
+                            )
+                        )
+                    }
+                }
+            }
 
             // ... (Search Bar code) ...
 
@@ -264,51 +512,10 @@ fun HomeScreen(
                 )
             }
             
-            // Welcome Dialog (Personal Touch)
-            if (showWelcomeDialog && userName == null) {
-                WelcomeDialog(
-                    onNameEntered = { name ->
-                        viewModel.setUserName(name)
-                        showWelcomeDialog = false
-                    },
-                    onDismiss = { /* Optional: Allow skip? For now, forced */ }
-                )
-            }
+            
+            // Onboarding completely replaced WelcomeDialog.
 
 
-            // Search Bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = {
-                    Text(
-                        "Search songs, artists, albums",
-                        fontFamily = OutfitFontFamily,
-                        fontWeight = FontWeight.Light
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = TextSecondary
-                    )
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = SoftGold,
-                    unfocusedBorderColor = GlassBorder,
-                    cursorColor = SoftGold,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    focusedContainerColor = BlackSurface,
-                    unfocusedContainerColor = BlackSurface
-                )
-            )
 
             // Scrollable Tab Row (CRITICAL: Must scroll horizontally)
             ScrollableTabRow(
@@ -377,13 +584,25 @@ fun HomeScreen(
                         0 -> {
                             // Tracks
                             if (isLoading) LoadingState()
-                            else if (filteredSongs.isEmpty()) EmptyState()
-                            else SongList(
-                                songs = filteredSongs,
-                                currentSongId = currentSong?.id,
-                                onSongClick = { song -> viewModel.playSong(song.uri) },
-                                state = tracksListState
-                            )
+                            else if (songList.isEmpty()) EmptyState()
+                            else if (searchQuery.text.isNotBlank()) {
+                                SongList(
+                                    songs = filteredSongs,
+                                    currentSongId = currentSong?.id,
+                                    onSongClick = { song -> viewModel.playSong(song.uri) },
+                                    state = tracksListState
+                                )
+                            } else {
+                                SpotifyTracksFeed(
+                                    allSongs = songList,
+                                    recentAddedSongs = recentAddedSongs,
+                                    recentlyPlayedSongs = recentPlayedSongs,
+                                    mostPlayedSongs = mostPlayedSongs,
+                                    currentSongId = currentSong?.id,
+                                    onSongClick = { song -> viewModel.playSong(song.uri) },
+                                    state = tracksListState
+                                )
+                            }
                         }
                         1 -> {
                             // Folders
@@ -432,9 +651,311 @@ fun HomeScreen(
                         }
                     }
                 }
+
+                val activeListState = when (selectedTabIndex) {
+                    0 -> tracksListState
+                    1 -> foldersListState
+                    2 -> albumsListState
+                    3 -> artistsListState
+                    else -> favoritesListState
+                }
+                val activeTotalItems = when (selectedTabIndex) {
+                    0 -> {
+                        if (searchQuery.text.isNotBlank()) {
+                            filteredSongs.size
+                        } else {
+                            val rails = listOf(recentPlayedSongs, mostPlayedSongs, recentAddedSongs).count { it.isNotEmpty() }
+                            allFavorites.size + songList.size + (rails * 2) + 1
+                        }
+                    }
+                    1 -> folders.size
+                    2 -> albums.size
+                    3 -> artists.size
+                    else -> filteredSongs.size
+                }
+
+                SideScrollIndicator(
+                    listState = activeListState,
+                    totalItems = activeTotalItems,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(top = 12.dp, bottom = 108.dp, end = 4.dp)
+                        .fillMaxHeight()
+                )
+            }
+        } // End of outer Column (372)
+            
+            // --- Cinematic Hero Plate Overlay ---
+            // Only show if animating or active to optimizations
+            if (isColdStart || plateOffsetY > (-1000).dp) {
+                com.eplaytime.app.ui.components.HeroGlassPlate(
+                    userName = userName,
+                    greeting = greeting,
+                    onDismiss = { isColdStart = false },
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = plateOffsetY)
+                )
             }
         }
     }
+}
+
+private fun isSongFromHiddenFolder(song: Song): Boolean {
+    val bucket = song.bucketDisplayName.trim()
+    return bucket.startsWith(".") || containsHiddenSegment(song.folderPath)
+}
+
+private fun containsHiddenSegment(path: String): Boolean {
+    if (path.isBlank()) return false
+    val normalized = path.replace('\\', '/')
+    return normalized
+        .split('/')
+        .any { segment -> segment.isNotBlank() && segment.startsWith(".") }
+}
+
+@Composable
+private fun SpotifyTracksFeed(
+    allSongs: List<Song>,
+    recentAddedSongs: List<Song>,
+    recentlyPlayedSongs: List<Song>,
+    mostPlayedSongs: List<Song>,
+    currentSongId: Long?,
+    onSongClick: (Song) -> Unit,
+    state: androidx.compose.foundation.lazy.LazyListState
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = state,
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        if (recentlyPlayedSongs.isNotEmpty()) {
+            item {
+                HomeSectionTitle("Recently Played")
+            }
+            item {
+                SongHorizontalRail(songs = recentlyPlayedSongs.take(12), currentSongId = currentSongId, onSongClick = onSongClick)
+            }
+        }
+
+        if (mostPlayedSongs.isNotEmpty()) {
+            item {
+                HomeSectionTitle("Most Played")
+            }
+            item {
+                SongHorizontalRail(songs = mostPlayedSongs.take(12), currentSongId = currentSongId, onSongClick = onSongClick)
+            }
+        }
+
+        if (recentAddedSongs.isNotEmpty()) {
+            item {
+                HomeSectionTitle("Recently Added")
+            }
+            item {
+                SongHorizontalRail(songs = recentAddedSongs.take(12), currentSongId = currentSongId, onSongClick = onSongClick)
+            }
+        }
+
+        item {
+            HomeSectionTitle("All Tracks")
+        }
+
+        items(items = allSongs, key = { it.uri }, contentType = { "track_row" }) { song ->
+            SongRowItem(song = song, isCurrent = song.id == currentSongId, onClick = { onSongClick(song) })
+        }
+    }
+}
+
+@Composable
+private fun HomeSectionTitle(title: String) {
+    Text(
+        text = title,
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 18.sp,
+        color = TextPrimary
+    )
+}
+
+@Composable
+private fun SongHorizontalRail(
+    songs: List<Song>,
+    currentSongId: Long?,
+    onSongClick: (Song) -> Unit
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp)
+    ) {
+        items(items = songs, key = { it.uri }, contentType = { "rail_song" }) { song ->
+            SongRailCard(song = song, isCurrent = song.id == currentSongId, onClick = { onSongClick(song) })
+        }
+    }
+}
+
+@Composable
+private fun SongRailCard(
+    song: Song,
+    isCurrent: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(150.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (isCurrent) BrandGlowColor.copy(alpha = 0.18f) else BlackSurface)
+            .clickable { onClick() }
+            .padding(10.dp)
+    ) {
+        AsyncImage(
+            model = if (!song.albumArtUri.isNullOrBlank()) song.albumArtUri else song.uri,
+            contentDescription = song.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(130.dp)
+                .clip(RoundedCornerShape(10.dp))
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = song.title,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontFamily = OutfitFontFamily,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = TextPrimary
+        )
+        Text(
+            text = song.artist,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontFamily = OutfitFontFamily,
+            fontWeight = FontWeight.Normal,
+            fontSize = 12.sp,
+            color = TextSecondary
+        )
+    }
+}
+
+@Composable
+private fun SongRowItem(
+    song: Song,
+    isCurrent: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (isCurrent) BrandGlowColor.copy(alpha = 0.14f) else BlackSurface)
+            .clickable { onClick() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = if (!song.albumArtUri.isNullOrBlank()) song.albumArtUri else song.uri,
+            contentDescription = song.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(54.dp)
+                .clip(RoundedCornerShape(10.dp))
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = song.title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontFamily = OutfitFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp,
+                color = TextPrimary
+            )
+            Text(
+                text = song.artist,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontFamily = OutfitFontFamily,
+                fontWeight = FontWeight.Normal,
+                fontSize = 13.sp,
+                color = TextSecondary
+            )
+        }
+    }
+}
+
+@Composable
+private fun SideScrollIndicator(
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    totalItems: Int,
+    modifier: Modifier = Modifier
+) {
+    val scrollInfo by remember {
+        derivedStateOf {
+            val layoutTotal = listState.layoutInfo.totalItemsCount
+            val effectiveTotal = if (layoutTotal > 0) layoutTotal else totalItems
+            val visible = listState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+            val maxScroll = (effectiveTotal - visible).coerceAtLeast(1)
+            val fraction = (listState.firstVisibleItemIndex.toFloat() / maxScroll.toFloat()).coerceIn(0f, 1f)
+            Triple(effectiveTotal, visible, fraction)
+        }
+    }
+    val (effectiveTotalItems, visibleCount, scrollFraction) = scrollInfo
+    val maxScrollable = (effectiveTotalItems - visibleCount).coerceAtLeast(1)
+    if (effectiveTotalItems <= 0) return
+    if (visibleCount >= effectiveTotalItems) return
+    val thumbFraction = (visibleCount.toFloat() / effectiveTotalItems.toFloat()).coerceIn(0.08f, 0.45f)
+    val scope = rememberCoroutineScope()
+    var indicatorHeightPx by remember { mutableFloatStateOf(1f) }
+
+    fun jumpToFraction(fraction: Float) {
+        val safeFraction = fraction.coerceIn(0f, 1f)
+        val targetIndex = (safeFraction * maxScrollable.toFloat()).toInt().coerceIn(0, maxScrollable)
+        scope.launch {
+            listState.scrollToItem(targetIndex)
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .width(24.dp)
+            .onSizeChanged { indicatorHeightPx = it.height.toFloat().coerceAtLeast(1f) }
+            .pointerInput(maxScrollable, indicatorHeightPx) {
+                detectTapGestures { offset ->
+                    jumpToFraction(offset.y / indicatorHeightPx)
+                }
+            }
+            .pointerInput(maxScrollable, indicatorHeightPx) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        jumpToFraction(offset.y / indicatorHeightPx)
+                    },
+                    onDrag = { change, _ ->
+                        jumpToFraction(change.position.y / indicatorHeightPx)
+                    }
+                )
+            }
+            .drawBehind {
+                val trackWidth = size.width * 0.22f
+                val x = (size.width - trackWidth) / 2f
+                drawRoundRect(
+                    color = TextSecondary.copy(alpha = 0.28f),
+                    topLeft = androidx.compose.ui.geometry.Offset(x, 0f),
+                    size = androidx.compose.ui.geometry.Size(trackWidth, size.height),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(trackWidth, trackWidth)
+                )
+
+                val thumbHeight = size.height * thumbFraction
+                val thumbY = (size.height - thumbHeight) * scrollFraction
+                drawRoundRect(
+                    color = SoftGold.copy(alpha = if (listState.isScrollInProgress) 0.9f else 0.65f),
+                    topLeft = androidx.compose.ui.geometry.Offset(x, thumbY),
+                    size = androidx.compose.ui.geometry.Size(trackWidth, thumbHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(trackWidth, trackWidth)
+                )
+            }
+    )
 }
 
 @Composable
@@ -444,26 +965,40 @@ private fun GlassHeader(
     onSettingsClick: () -> Unit,
     onRefreshClick: () -> Unit,
     isLoading: Boolean,
-    hasNewSongs: Boolean, // New param
-    userName: String?
+    hasNewSongs: Boolean,
+    userName: String?,
+    onSearchClick: () -> Unit,
+    searchIconOffset: Dp = 0.dp,
+    refreshIconOffset: Dp = 0.dp,
+    otherIconsOffset: Dp = 0.dp
 ) {
-    // ... (greeting logic) ...
-    val greeting = remember(userName) {
-        val timeGreeting = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
-            in 5..11 -> "Good Morning"
-            in 12..17 -> "Good Afternoon"
-            in 18..21 -> "Good Evening"
-            else -> "Good Night"
-        }
-        if (userName != null) "$timeGreeting, $userName" else timeGreeting
-    }
-
     val haptic = LocalHapticFeedback.current
     var isRefreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    // Pulse animation for New Songs
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    // Shimmer Animation for Logo Border
+    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+    val shimmerTranslate by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1000f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmer"
+    )
+    
+    val shimmerBrush = Brush.linearGradient(
+        colors = listOf(
+            SoftGold.copy(alpha = 0.3f),
+            SoftGold,
+            SoftGold.copy(alpha = 0.3f)
+        ),
+        start = androidx.compose.ui.geometry.Offset(0f, 0f),
+        end = androidx.compose.ui.geometry.Offset(shimmerTranslate, shimmerTranslate)
+    )
+
+    // Pulse animation for New Songs (Refresh Button)
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
         targetValue = if (hasNewSongs) 1.2f else 1f,
@@ -483,88 +1018,158 @@ private fun GlassHeader(
         ),
         label = "rotation"
     )
+    
+    // Dynamic Greeting Logic (Local to Header for display)
+    val greeting = remember(userName) {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val timeGreeting = when (hour) {
+            in 4..4 -> "Still Awake?"
+            in 5..7 -> "Early Morning"
+            in 8..11 -> "Good Morning"
+            in 12..13 -> "Good Noon"
+            in 14..16 -> "Good Afternoon"
+            in 17..18 -> "Good Evening"
+            in 19..21 -> "Calm Evening"
+            in 22..23 -> "Good Night"
+            else -> "Midnight Focus"
+        }
+        if (userName != null) "$timeGreeting, $userName!" else "$timeGreeting!"
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .background(BlackSurface.copy(alpha = 0.5f)) // Semi-transparent base
             .background(
-                Brush.verticalGradient(
+                Brush.radialGradient(
                     colors = listOf(
-                        BlackSurface.copy(alpha = 0.95f),
+                        BrandGlowColor.copy(alpha = 0.15f),
                         Color.Transparent
-                    )
+                    ),
+                    center = Offset.Unspecified,
+                    radius = 800f
                 )
             )
-            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .padding(horizontal = 20.dp, vertical = 24.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
-                Text(
-                    text = greeting,
-                    fontFamily = OutfitFontFamily,
-                    fontWeight = FontWeight.Light,
-                    fontSize = 14.sp,
-                    color = TextSecondary
-                )
-                Text(
-                    text = "Audia Player",
-                    fontFamily = OutfitFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 28.sp,
-                    color = TextPrimary
-                )
+            // LEFT: Name Plate (Logo + Text)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                // Rounded Square Logo with Shimmer Border
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(52.dp)
+                        .border(2.dp, shimmerBrush, RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onAboutClick() }
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.audia_player),
+                        contentDescription = "Logo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                // Greeting & Name
+                Column {
+                    Text(
+                        text = greeting.split(",")[0], // Just the "Good Morning" part if comma exists
+                        fontFamily = GaladaFontFamily, // Rich Elegant Font
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 20.sp, // Larger for cursive font visibility
+                        color = TextSecondary
+                    )
+                    Text(
+                        text = userName ?: "Audia User",
+                        fontFamily = GaladaFontFamily, // Rich Elegant Font
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 26.sp, // Prominent
+                        color = TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
+            // RIGHT: Action Buttons
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Refresh/Scan Button with Haptic Feedback + Pulse
+                // 1. Search
+                IconButton(
+                    onClick = onSearchClick, 
+                    modifier = Modifier.size(32.dp).offset(y = searchIconOffset)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = SoftGold,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                // 2. Refresh (with Pulse/Rotation)
                 IconButton(
                     onClick = {
                         if (!isRefreshing && !isLoading) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             isRefreshing = true
                             onRefreshClick()
-                            // Reset after animation
                             scope.launch {
                                 kotlinx.coroutines.delay(1500)
                                 isRefreshing = false
                             }
                         }
                     },
-                    modifier = Modifier.scale(if (hasNewSongs) pulseScale else 1.1f)
+                    modifier = Modifier
+                        .size(32.dp)
+                        .scale(if (hasNewSongs) pulseScale else 1f)
+                        .offset(y = refreshIconOffset)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Scan",
                         tint = if (hasNewSongs) Color.Red else if (isRefreshing || isLoading) SoftGold else TextSecondary,
                         modifier = Modifier
-                            .size(24.dp)
+                            .size(22.dp)
                             .graphicsLayer { rotationZ = if (isRefreshing || isLoading) rotation else 0f }
                     )
                 }
 
-                // Settings Button (Gear)
-                IconButton(onClick = onSettingsClick) {
+                // 3. Scheduler
+                IconButton(
+                    onClick = onSchedulerClick, 
+                    modifier = Modifier.size(32.dp).offset(y = otherIconsOffset)
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings",
+                        imageVector = Icons.Default.Alarm,
+                        contentDescription = "Scheduler",
                         tint = TextSecondary,
                         modifier = Modifier.size(22.dp)
                     )
                 }
 
-                // Scheduler Button
-                IconButton(onClick = onSchedulerClick) {
+                // 4. Settings
+                IconButton(
+                    onClick = onSettingsClick, 
+                    modifier = Modifier.size(32.dp).offset(y = otherIconsOffset)
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Alarm,
-                        contentDescription = "Scheduler",
-                        tint = SoftGold,
-                        modifier = Modifier.size(26.dp)
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }

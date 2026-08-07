@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.provider.MediaStore
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -53,10 +52,7 @@ class EngagementWorker @AssistedInject constructor(
         // Logic for message
         val message = when {
             hoursSinceOpen in 12..23 -> "Hey $userName, take a music break! 🎵"
-            hoursSinceOpen in 24..71 -> {
-                val songTitle = getRandomSongTitle()
-                if (songTitle != null) "Suggested for you: '$songTitle' 🎧" else "Rediscover your music library! 🎧"
-            }
+            hoursSinceOpen in 24..71 -> "Come back and continue your vibe on Audia. 🎧"
             hoursSinceOpen >= 72 -> "We miss you, $userName! The music is waiting. 🥺"
             else -> return Result.success() // Less than 12 hours inactive
         }
@@ -67,32 +63,6 @@ class EngagementWorker @AssistedInject constructor(
 
         return Result.success()
     }
-
-    private fun getRandomSongTitle(): String? {
-        val projection = arrayOf(MediaStore.Audio.Media.TITLE)
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-        
-        // This is a simplified random fetch. In a real large DB, we might want a raw query to order by random limits.
-        // But ContentProvider query logic is limited. 
-        // We'll fetch a cursor and move to a random position.
-        
-        applicationContext.contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            selection,
-            null,
-            null
-        )?.use { cursor ->
-            if (cursor.count > 0) {
-                val randomPos = (0 until cursor.count).random()
-                cursor.moveToPosition(randomPos)
-                val titleIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                return cursor.getString(titleIndex)
-            }
-        }
-        return null
-    }
-
     private fun sendNotification(message: String): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ActivityCompat.checkSelfPermission(
@@ -117,12 +87,14 @@ class EngagementWorker @AssistedInject constructor(
         )
 
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.updateappicon) 
+            .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle("Audia Player")
             .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setLargeIcon(android.graphics.BitmapFactory.decodeResource(applicationContext.resources, R.drawable.audia_player))
 
         NotificationManagerCompat.from(applicationContext).notify(NOTIFICATION_ID, builder.build())
         return true

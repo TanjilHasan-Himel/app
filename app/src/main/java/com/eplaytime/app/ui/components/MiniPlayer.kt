@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -80,7 +81,8 @@ fun MiniPlayer(
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(RoundedCornerShape(20.dp))
-                        .background(BlackSurface)
+                        .background(BlackSurface.copy(alpha = 0.8f)) // Less opaque for glass effect
+                        .blur(15.dp) // Blur effect
                         .border(
                             width = 1.dp,
                             brush = Brush.verticalGradient(

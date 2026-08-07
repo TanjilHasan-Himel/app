@@ -41,6 +41,10 @@ import com.eplaytime.app.ui.theme.SoftGold
 import com.eplaytime.app.ui.theme.SoftGoldDark
 import com.eplaytime.app.ui.theme.TextTertiary
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.Spring
+
 /**
  * Rich Player Controls with Haptics and Animations
  */
@@ -62,12 +66,19 @@ fun PlayerControls(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Previous
+        val prevInteractionSource = remember { MutableInteractionSource() }
+        val prevIsPressed by prevInteractionSource.collectIsPressedAsState()
+        val prevScale by animateFloatAsState(
+            targetValue = if (prevIsPressed) 0.75f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+        )
         IconButton(
             onClick = { 
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onPrevious() 
             },
-            modifier = Modifier.size(56.dp)
+            interactionSource = prevInteractionSource,
+            modifier = Modifier.size(56.dp).scale(prevScale)
         ) {
             Icon(
                 imageVector = Icons.Default.SkipPrevious,
@@ -78,12 +89,19 @@ fun PlayerControls(
         }
 
         // Rewind 5s
+        val rwInteractionSource = remember { MutableInteractionSource() }
+        val rwIsPressed by rwInteractionSource.collectIsPressedAsState()
+        val rwScale by animateFloatAsState(
+            targetValue = if (rwIsPressed) 0.75f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+        )
         IconButton(
             onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onSeekBackward()
             },
-            modifier = Modifier.size(40.dp)
+            interactionSource = rwInteractionSource,
+            modifier = Modifier.size(40.dp).scale(rwScale)
         ) {
             Icon(
                 imageVector = Icons.Default.Replay5,
@@ -94,16 +112,26 @@ fun PlayerControls(
         }
 
         // Play/Pause (Large, Round, Soft edges)
+        val playInteractionSource = remember { MutableInteractionSource() }
+        val playIsPressed by playInteractionSource.collectIsPressedAsState()
+        val playScale by animateFloatAsState(
+            targetValue = if (playIsPressed) 0.85f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+        )
         Box(
             modifier = Modifier
                 .size(80.dp)
+                .scale(playScale)
                 .clip(CircleShape)
                 .background(
                     Brush.linearGradient(
                         colors = listOf(SoftGold, SoftGoldDark)
                     )
                 )
-                .clickable { 
+                .clickable(
+                    interactionSource = playInteractionSource,
+                    indication = androidx.compose.foundation.LocalIndication.current
+                ) { 
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onPlayPause() 
                 },
@@ -118,12 +146,19 @@ fun PlayerControls(
         }
 
         // Forward 5s
+        val ffInteractionSource = remember { MutableInteractionSource() }
+        val ffIsPressed by ffInteractionSource.collectIsPressedAsState()
+        val ffScale by animateFloatAsState(
+            targetValue = if (ffIsPressed) 0.75f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+        )
         IconButton(
             onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onSeekForward()
             },
-            modifier = Modifier.size(40.dp)
+            interactionSource = ffInteractionSource,
+            modifier = Modifier.size(40.dp).scale(ffScale)
         ) {
             Icon(
                 imageVector = Icons.Default.Forward5,
@@ -134,12 +169,19 @@ fun PlayerControls(
         }
 
         // Next
+        val nextInteractionSource = remember { MutableInteractionSource() }
+        val nextIsPressed by nextInteractionSource.collectIsPressedAsState()
+        val nextScale by animateFloatAsState(
+            targetValue = if (nextIsPressed) 0.75f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+        )
         IconButton(
             onClick = { 
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onNext() 
             },
-            modifier = Modifier.size(56.dp)
+            interactionSource = nextInteractionSource,
+            modifier = Modifier.size(56.dp).scale(nextScale)
         ) {
             Icon(
                 imageVector = Icons.Default.SkipNext,

@@ -109,6 +109,9 @@ class AlarmReceiver : BroadcastReceiver() {
                             putExtra(EXTRA_SONG_URI, if (task.songUri.isNotEmpty()) task.songUri else songUri)
                             putExtra(EXTRA_ALARM_ID, alarmId)
                             putExtra(EXTRA_TARGET_VOLUME, task.targetVolume)
+                            putExtra("extra_song_title", task.songTitle)
+                            // Core USP behavior: scheduled alarm plays exactly one selected track.
+                            putExtra(MusicService.EXTRA_ALARM_SINGLE_SHOT, true)
                         }
                         ContextCompat.startForegroundService(context, serviceIntent)
                         Log.d(TAG, "✓ MusicService started as foreground service")

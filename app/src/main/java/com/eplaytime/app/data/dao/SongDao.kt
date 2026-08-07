@@ -26,4 +26,7 @@ interface SongDao {
     
     @Query("SELECT * FROM songs WHERE title LIKE '%' || :query || '%' OR artist LIKE '%' || :query || '%'")
     suspend fun searchSongs(query: String): List<Song>
+
+    @Query("SELECT * FROM songs ORDER BY RANDOM() LIMIT 1")
+    suspend fun getRandomSong(): Song?
 }

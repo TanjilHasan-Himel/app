@@ -2,6 +2,8 @@ package com.eplaytime.app.ui.viewmodel
 
 import android.content.ComponentName
 import android.content.Context
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -9,6 +11,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.eplaytime.app.data.datastore.LoopPreset
 import com.eplaytime.app.data.datastore.PlayTimeDataStore
 import com.eplaytime.app.data.database.FavoriteSong
 import com.eplaytime.app.data.model.Song
@@ -59,6 +62,10 @@ class MusicViewModel @Inject constructor(
     private var pendingPlayUri: String? = null
     private var playlistPrepared = false
     private var isRestoring = true // Lock: Prevent overwrite during restore
+    private var sleepTimerJob: Job? = null
+    private var volumeFadeJob: Job? = null
+    private var stopAfterCurrentSongJob: Job? = null
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     // State flows for UI
     private val _currentSong = MutableStateFlow<Song?>(null)
@@ -97,6 +104,15 @@ class MusicViewModel @Inject constructor(
     private val _favoriteSongIds = MutableStateFlow<Set<Long>>(emptySet())
     val favoriteSongIds: StateFlow<Set<Long>> = _favoriteSongIds.asStateFlow()
 
+    private val _recentPlayedSongs = MutableStateFlow<List<Song>>(emptyList())
+    val recentPlayedSongs: StateFlow<List<Song>> = _recentPlayedSongs.asStateFlow()
+
+    private val _mostPlayedSongs = MutableStateFlow<List<Song>>(emptyList())
+    val mostPlayedSongs: StateFlow<List<Song>> = _mostPlayedSongs.asStateFlow()
+
+    private var recentPlayedUrisCache: List<String> = emptyList()
+    private var playCountsCache: Map<String, Int> = emptyMap()
+
     // Flag for Sync needed
     private val _hasNewSongs = MutableStateFlow(false)
     val hasNewSongs: StateFlow<Boolean> = _hasNewSongs.asStateFlow()
@@ -118,6 +134,24 @@ class MusicViewModel @Inject constructor(
     private val _audioSessionId = MutableStateFlow(0)
     val audioSessionId: StateFlow<Int> = _audioSessionId.asStateFlow()
 
+    private val _playbackSpeed = MutableStateFlow(1.0f)
+    val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
+
+    private val _stopAfterCurrent = MutableStateFlow(false)
+    val stopAfterCurrent: StateFlow<Boolean> = _stopAfterCurrent.asStateFlow()
+
+    private val _fadeOnPlayPause = MutableStateFlow(true)
+    val fadeOnPlayPause: StateFlow<Boolean> = _fadeOnPlayPause.asStateFlow()
+
+    private val _sleepTimerRemainingMs = MutableStateFlow<Long?>(null)
+    val sleepTimerRemainingMs: StateFlow<Long?> = _sleepTimerRemainingMs.asStateFlow()
+
+    private val _stopAfterCurrentSong = MutableStateFlow(false)
+    val stopAfterCurrentSong: StateFlow<Boolean> = _stopAfterCurrentSong.asStateFlow()
+
+    private val _loopPresetsForCurrentSong = MutableStateFlow<List<LoopPreset>>(emptyList())
+    val loopPresetsForCurrentSong: StateFlow<List<LoopPreset>> = _loopPresetsForCurrentSong.asStateFlow()
+
     // Visualizer Style Carousel
     enum class VisualizerStyle { LIQUID_FILL, NEON_LINE, CLASSIC_BARS }
     private val _visualizerStyle = MutableStateFlow(VisualizerStyle.LIQUID_FILL)
@@ -128,6 +162,35 @@ class MusicViewModel @Inject constructor(
         _visualizerStyle.value = VisualizerStyle.values()[nextOrdinal]
     }
 
+    // Audio Effects
+    val bassBoostStrength: StateFlow<Int> = dataStore.bassBoostStrength
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), 0)
+
+    val eqBandsLevels: StateFlow<String> = dataStore.eqBandsLevels
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), "")
+
+    fun setBassBoostStrength(strength: Int) {
+        viewModelScope.launch {
+            dataStore.setBassBoostStrength(strength)
+            com.eplaytime.app.util.AudioEffectManager.setBassBoostStrength(strength.toShort())
+        }
+    }
+
+    fun setEqBandLevel(band: Short, level: Short) {
+        viewModelScope.launch {
+            com.eplaytime.app.util.AudioEffectManager.setBandLevel(band, level)
+            
+            // Re-read current levels and store as String
+            val numBands = com.eplaytime.app.util.AudioEffectManager.getNumberOfBands()
+            val levelsList = mutableListOf<Short>()
+            for (i in 0 until numBands) {
+                levelsList.add(com.eplaytime.app.util.AudioEffectManager.getBandLevel(i.toShort()))
+            }
+            val levelsStr = levelsList.joinToString(",")
+            dataStore.setEqBandsLevels(levelsStr)
+        }
+    }
+
     // User Name
     val userName: StateFlow<String?> = dataStore.userName
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), null)
@@ -135,6 +198,15 @@ class MusicViewModel @Inject constructor(
     fun setUserName(name: String) {
         viewModelScope.launch {
             dataStore.setUserName(name)
+        }
+    }
+
+    val hasSeenOnboarding: StateFlow<Boolean?> = dataStore.hasSeenOnboarding
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), null)
+
+    fun setHasSeenOnboarding(seen: Boolean) {
+        viewModelScope.launch {
+            dataStore.setHasSeenOnboarding(seen)
         }
     }
 
@@ -152,6 +224,9 @@ class MusicViewModel @Inject constructor(
         initializeMediaController()
         loadLocalSongs()
         loadFavorites()
+        observePremiumPrefs()
+        observeLoopPresets()
+        observePlayHistory()
         
         // Check for new songs in background
         viewModelScope.launch {
@@ -163,6 +238,107 @@ class MusicViewModel @Inject constructor(
 
         // CRITICAL: Sync with service BEFORE restoring state from DataStore
         syncWithRunningService()
+    }
+
+    private fun observePremiumPrefs() {
+        viewModelScope.launch {
+            dataStore.stopAfterCurrent.collect { _stopAfterCurrent.value = it }
+        }
+        viewModelScope.launch {
+            dataStore.fadeOnPlayPause.collect { _fadeOnPlayPause.value = it }
+        }
+        viewModelScope.launch {
+            dataStore.playbackState.collect { state ->
+                _playbackSpeed.value = state.lastPlaybackSpeed
+            }
+        }
+        viewModelScope.launch {
+            dataStore.bassBoostStrength.collect { strength ->
+                com.eplaytime.app.util.AudioEffectManager.setBassBoostStrength(strength.toShort())
+            }
+        }
+        viewModelScope.launch {
+            dataStore.eqBandsLevels.collect { levelsStr ->
+                if (levelsStr.isNotBlank()) {
+                    val levels = levelsStr.split(",").mapNotNull { it.toShortOrNull() }
+                    levels.forEachIndexed { index, level ->
+                        com.eplaytime.app.util.AudioEffectManager.setBandLevel(index.toShort(), level)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun observePlayHistory() {
+        viewModelScope.launch {
+            dataStore.recentPlayedUris.collect { uris ->
+                recentPlayedUrisCache = uris
+                recalculatePlayLists()
+            }
+        }
+        viewModelScope.launch {
+            dataStore.playCounts.collect { counts ->
+                playCountsCache = counts
+                recalculatePlayLists()
+            }
+        }
+    }
+
+    private fun recalculatePlayLists() {
+        val songsByUri = _songList.value.associateBy { it.uri }
+        _recentPlayedSongs.value = recentPlayedUrisCache
+            .mapNotNull { songsByUri[it] }
+            .distinctBy { it.uri }
+
+        _mostPlayedSongs.value = playCountsCache.entries
+            .sortedByDescending { it.value }
+            .mapNotNull { (uri, _) -> songsByUri[uri] }
+    }
+
+    private fun markSongPlayed(uri: String) {
+        viewModelScope.launch {
+            dataStore.addRecentPlayedSong(uri)
+            dataStore.incrementPlayCount(uri)
+        }
+    }
+
+    private fun observeLoopPresets() {
+        viewModelScope.launch {
+            dataStore.loopPresets.collect { map ->
+                val uri = _currentSong.value?.uri
+                _loopPresetsForCurrentSong.value = if (uri == null) emptyList() else map[uri].orEmpty()
+            }
+        }
+    }
+
+    private fun refreshCurrentSongLoopPresets() {
+        viewModelScope.launch {
+            val map = dataStore.loopPresets.first()
+            val uri = _currentSong.value?.uri
+            _loopPresetsForCurrentSong.value = if (uri == null) emptyList() else map[uri].orEmpty()
+        }
+    }
+
+    private fun detectAudioRoute(): String {
+        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        val hasHeadphones = devices.any {
+            it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                it.type == AudioDeviceInfo.TYPE_USB_HEADSET
+        }
+        return if (hasHeadphones) "headphones" else "speaker"
+    }
+
+    private fun routeAdjustedStartPosition(routePosition: Long, route: String): Long {
+        if (routePosition <= 0L) return 0L
+        return if (route == "speaker") {
+            // Speaker profile: rewind a little context instead of exact resume.
+            (routePosition - 15_000L).coerceAtLeast(0L)
+        } else {
+            routePosition
+        }
     }
 
     /**
@@ -201,6 +377,7 @@ class MusicViewModel @Inject constructor(
                             _isPlaying.value = controller.isPlaying
                             _shuffleEnabled.value = controller.shuffleModeEnabled
                             _repeatMode.value = controller.repeatMode
+                            _playbackSpeed.value = controller.playbackParameters.speed
                             
                             android.util.Log.d("MusicViewModel", "✓ Synced with running service: ${song.title}")
                             
@@ -231,6 +408,7 @@ class MusicViewModel @Inject constructor(
                             _currentSong.value = tempSong
                             _isPlaying.value = controller.isPlaying
                             _duration.value = controller.duration
+                            _playbackSpeed.value = controller.playbackParameters.speed
                             
                             android.util.Log.d("MusicViewModel", "⚠ Synced with FOREIGN audio (Alarm?): ${tempSong.title}")
                             
@@ -280,6 +458,58 @@ class MusicViewModel @Inject constructor(
      */
     private fun setupPlayerListener() {
         mediaController?.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                super.onMediaItemTransition(mediaItem, reason)
+
+                if (_stopAfterCurrent.value && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    mediaController?.let { controller ->
+                        val previousIndex = (controller.currentMediaItemIndex - 1).coerceAtLeast(0)
+                        controller.seekTo(previousIndex, 0L)
+                        controller.pause()
+                    }
+                    _stopAfterCurrent.value = false
+                    viewModelScope.launch { dataStore.setStopAfterCurrent(false) }
+                    return
+                }
+
+                // Reset progress immediately on song change
+                _progress.value = 0L
+                _duration.value = mediaController?.duration?.takeIf { it > 0 } ?: 0L
+                
+                // Update current song object if needed
+                mediaItem?.localConfiguration?.uri?.toString()?.let { uri ->
+                    val song = _songList.value.find { it.uri == uri }
+                    if (song != null) {
+                        _currentSong.value = song
+                        // Fallback duration from metadata if controller isn't ready
+                        if (_duration.value == 0L && song.duration > 0) {
+                            _duration.value = song.duration
+                        }
+                    } else if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
+                         // Only create temp song if we really have to
+                    }
+
+                    // Save to DataStore
+                    viewModelScope.launch {
+                        dataStore.saveLastSong(uri)
+                    }
+                    markSongPlayed(uri)
+                    refreshCurrentSongLoopPresets()
+                }
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                super.onPlaybackStateChanged(playbackState)
+                if (playbackState == Player.STATE_READY) {
+                    _duration.value = mediaController?.duration?.takeIf { it > 0 } ?: 0L
+                    _isPlaying.value = mediaController?.isPlaying == true
+                }
+                if (playbackState == Player.STATE_ENDED) {
+                    _isPlaying.value = false
+                    stopProgressUpdates()
+                }
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
                 if (isPlaying) {
@@ -289,7 +519,7 @@ class MusicViewModel @Inject constructor(
                     // EAGER SAVE: Save state immediately on Pause (Notification/Earbuds)
                     viewModelScope.launch {
                         _currentSong.value?.let { song ->
-                            dataStore.savePlaybackState(song.uri, mediaController?.currentPosition ?: 0L, 1.0f, _shuffleEnabled.value, _repeatMode.value)
+                            dataStore.savePlaybackState(song.uri, mediaController?.currentPosition ?: 0L, _playbackSpeed.value, _shuffleEnabled.value, _repeatMode.value)
                         }
                     }
                 }
@@ -299,33 +529,8 @@ class MusicViewModel @Inject constructor(
                  // EAGER SAVE: Save state on Seek/Skip
                  viewModelScope.launch {
                     _currentSong.value?.let { song ->
-                        dataStore.savePlaybackState(song.uri, mediaController?.currentPosition ?: 0L, 1.0f, _shuffleEnabled.value, _repeatMode.value)
+                        dataStore.savePlaybackState(song.uri, mediaController?.currentPosition ?: 0L, _playbackSpeed.value, _shuffleEnabled.value, _repeatMode.value)
                     }
-                }
-            }
-
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                mediaItem?.let {
-                    // Find song by URI
-                    val songUri = it.localConfiguration?.uri.toString()
-                    val foundSong = _songList.value.find { song -> song.uri == songUri }
-                    
-                    if (foundSong != null) {
-                        _currentSong.value = foundSong
-                    } else if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
-                         // Only create temp song if we really have to
-                    }
-
-                    // Save to DataStore
-                    viewModelScope.launch {
-                        dataStore.saveLastSong(songUri)
-                    }
-                }
-            }
-
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) {
-                    _duration.value = mediaController?.duration ?: 0L
                 }
             }
 
@@ -354,6 +559,7 @@ class MusicViewModel @Inject constructor(
                     
                     val songs = musicRepository.getAllSongs(filterShortAudio, filterCallRecordings)
                     _songList.value = songs
+                    recalculatePlayLists()
 
                     // Load categories
                     _albums.value = musicRepository.getAllAlbums()
@@ -386,6 +592,7 @@ class MusicViewModel @Inject constructor(
                     musicRepository.rescanDevice(filterShortAudio, filterCallRecordings)
                     val songs = musicRepository.songs.value
                     _songList.value = songs // Correct property
+                    recalculatePlayLists()
                     
                     // Reload categories
                     _albums.value = musicRepository.getAllAlbums()
@@ -448,6 +655,7 @@ class MusicViewModel @Inject constructor(
                                 }
                                 controller.setMediaItems(mediaItems, index, state.lastPosition)
                                 controller.prepare()
+                                controller.setPlaybackSpeed(state.lastPlaybackSpeed)
                                 controller.pause() // Ensure it starts PAUSED
                                 
                                 playlistPrepared = true
@@ -532,31 +740,47 @@ class MusicViewModel @Inject constructor(
         val controller = mediaController ?: return
         val songIndex = _songList.value.indexOfFirst { it.uri == uri }
         if (songIndex >= 0) {
-            val mediaItems = _songList.value.map { song ->
-                MediaItem.Builder()
-                    .setUri(song.uri)
-                    .setMediaId(song.id.toString())
-                    .build()
-            }
-            controller.setMediaItems(mediaItems, songIndex, 0L)
-            controller.prepare()
-            controller.play()
-            playlistPrepared = true
-            pendingPlayUri = null
-            _currentSong.value = _songList.value[songIndex]
+            val route = detectAudioRoute()
+            viewModelScope.launch {
+                val routePosition = dataStore.getRoutePosition(uri, route)
+                val startPosition = routeAdjustedStartPosition(routePosition, route)
 
-            // Clear A-B loop when new song starts
-            clearLoop()
-            
-            // LAYER 2: ELEPHANT MEMORY - Save immediately
-             viewModelScope.launch {
+                val mediaItems = _songList.value.map { song -> 
+                    MediaItem.Builder()
+                        .setUri(song.uri)
+                        .setMediaId(song.id.toString())
+                        .build()
+                }
+
+                controller.setMediaItems(mediaItems, songIndex, startPosition)
+                controller.prepare()
+                controller.setPlaybackSpeed(_playbackSpeed.value)
+
+                if (_fadeOnPlayPause.value) {
+                    controller.volume = 0f
+                    controller.play()
+                    fadePlayerVolume(0f, 1f, 600L)
+                } else {
+                    controller.play()
+                }
+
+                playlistPrepared = true
+                pendingPlayUri = null
+                _currentSong.value = _songList.value[songIndex]
+
+                // Clear A-B loop when new song starts
+                clearLoop()
+                refreshCurrentSongLoopPresets()
+
+                // LAYER 2: ELEPHANT MEMORY - Save immediately
                 dataStore.savePlaybackState(
                     songUri = uri,
-                    position = 0L,
+                    position = startPosition,
+                    playbackSpeed = _playbackSpeed.value,
                     shuffleEnabled = _shuffleEnabled.value,
                     repeatMode = _repeatMode.value
                 )
-             }
+            }
         }
     }
 
@@ -576,9 +800,25 @@ class MusicViewModel @Inject constructor(
     fun togglePlayPause() {
         mediaController?.let { controller ->
             if (_isPlaying.value) {
-                controller.pause()
+                if (_fadeOnPlayPause.value) {
+                    viewModelScope.launch {
+                        fadePlayerVolume(controller.volume, 0f, 350L)
+                        controller.pause()
+                        controller.volume = 1f
+                    }
+                } else {
+                    controller.pause()
+                }
             } else {
-                controller.play()
+                if (_fadeOnPlayPause.value) {
+                    controller.volume = 0f
+                    controller.play()
+                    viewModelScope.launch {
+                        fadePlayerVolume(0f, 1f, 500L)
+                    }
+                } else {
+                    controller.play()
+                }
             }
             // LAYER 2: ELEPHANT MEMORY - Save state immediately
             viewModelScope.launch {
@@ -586,6 +826,7 @@ class MusicViewModel @Inject constructor(
                     dataStore.savePlaybackState(
                         songUri = song.uri,
                         position = controller.currentPosition,
+                        playbackSpeed = _playbackSpeed.value,
                         shuffleEnabled = _shuffleEnabled.value,
                         repeatMode = _repeatMode.value
                     )
@@ -603,21 +844,174 @@ class MusicViewModel @Inject constructor(
         // LAYER 2: ELEPHANT MEMORY - Save position immediately
         viewModelScope.launch {
              dataStore.saveLastPosition(position)
+             _currentSong.value?.let { song ->
+                 dataStore.saveRoutePosition(song.uri, detectAudioRoute(), position)
+             }
         }
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        val normalized = speed.coerceIn(0.5f, 2.0f)
+        _playbackSpeed.value = normalized
+        mediaController?.setPlaybackSpeed(normalized)
+        viewModelScope.launch {
+            _currentSong.value?.let { song ->
+                dataStore.savePlaybackState(
+                    songUri = song.uri,
+                    position = _progress.value,
+                    playbackSpeed = normalized,
+                    shuffleEnabled = _shuffleEnabled.value,
+                    repeatMode = _repeatMode.value
+                )
+            }
+        }
+    }
+
+    fun cyclePlaybackSpeed() {
+        val speeds = listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+        val currentIndex = speeds.indexOfFirst { kotlin.math.abs(it - _playbackSpeed.value) < 0.01f }
+        val nextIndex = if (currentIndex >= 0) (currentIndex + 1) % speeds.size else 1
+        setPlaybackSpeed(speeds[nextIndex])
+    }
+
+    fun toggleStopAfterCurrent() {
+        val next = !_stopAfterCurrent.value
+        _stopAfterCurrent.value = next
+        viewModelScope.launch { dataStore.setStopAfterCurrent(next) }
+    }
+
+    fun setStopAfterCurrent(enabled: Boolean) {
+        _stopAfterCurrent.value = enabled
+        viewModelScope.launch { dataStore.setStopAfterCurrent(enabled) }
+    }
+
+    fun stopPlaybackNow(useFade: Boolean = true) {
+        val controller = mediaController ?: return
+        viewModelScope.launch {
+            if (useFade && _fadeOnPlayPause.value && controller.isPlaying) {
+                fadePlayerVolume(controller.volume, 0f, 350L)
+                controller.pause()
+                controller.volume = 1f
+            } else {
+                controller.pause()
+            }
+        }
+    }
+
+    fun toggleFadeOnPlayPause() {
+        val next = !_fadeOnPlayPause.value
+        _fadeOnPlayPause.value = next
+        viewModelScope.launch { dataStore.setFadeOnPlayPause(next) }
+    }
+
+    fun startSleepTimer(minutes: Int, fadeOut: Boolean = true) {
+        val totalMs = minutes.coerceAtLeast(1) * 60_000L
+        sleepTimerJob?.cancel()
+        sleepTimerJob = viewModelScope.launch {
+            var remaining = totalMs
+            while (remaining > 0) {
+                _sleepTimerRemainingMs.value = remaining
+                delay(1000L)
+                remaining -= 1000L
+            }
+            _sleepTimerRemainingMs.value = 0L
+            mediaController?.let { controller ->
+                if (fadeOut) {
+                    fadePlayerVolume(controller.volume, 0f, 4000L)
+                    controller.pause()
+                    controller.volume = 1f
+                } else {
+                    controller.pause()
+                }
+            }
+            _sleepTimerRemainingMs.value = null
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        _sleepTimerRemainingMs.value = null
+    }
+
+    fun toggleStopAfterCurrentSong() {
+        val newState = !_stopAfterCurrentSong.value
+        _stopAfterCurrentSong.value = newState
+        if (newState) {
+            // Watch for track change: when it changes, stop playback
+            stopAfterCurrentSongJob?.cancel()
+            stopAfterCurrentSongJob = viewModelScope.launch {
+                val startingSong = _currentSong.value?.uri
+                // Poll until the song changes (i.e., next song starts)
+                while (true) {
+                    delay(500L)
+                    val nowSong = _currentSong.value?.uri
+                    if (nowSong != startingSong) {
+                        // New song just started — pause immediately
+                        mediaController?.pause()
+                        _stopAfterCurrentSong.value = false
+                        break
+                    }
+                }
+            }
+        } else {
+            stopAfterCurrentSongJob?.cancel()
+            stopAfterCurrentSongJob = null
+        }
+    }
+
+    private suspend fun fadePlayerVolume(from: Float, to: Float, durationMs: Long) {
+        val controller = mediaController ?: return
+        volumeFadeJob?.cancel()
+        val fadeJob = viewModelScope.launch {
+            val steps = 12
+            val stepDelay = (durationMs / steps).coerceAtLeast(20L)
+            repeat(steps) { step ->
+                val t = (step + 1).toFloat() / steps.toFloat()
+                controller.volume = from + (to - from) * t
+                delay(stepDelay)
+            }
+            controller.volume = to
+        }
+        volumeFadeJob = fadeJob
+        fadeJob.join()
     }
 
     /**
      * Play next song
      */
     fun playNext() {
-        mediaController?.seekToNext()
+        val controller = mediaController ?: return
+        val wasPlaying = controller.isPlaying
+        viewModelScope.launch {
+            if (wasPlaying && _fadeOnPlayPause.value) {
+                fadePlayerVolume(controller.volume, 0f, 220L)
+                controller.seekToNext()
+                controller.play()
+                controller.volume = 0f
+                fadePlayerVolume(0f, 1f, 260L)
+            } else {
+                controller.seekToNext()
+            }
+        }
     }
 
     /**
      * Play previous song
      */
     fun playPrevious() {
-        mediaController?.seekToPrevious()
+        val controller = mediaController ?: return
+        val wasPlaying = controller.isPlaying
+        viewModelScope.launch {
+            if (wasPlaying && _fadeOnPlayPause.value) {
+                fadePlayerVolume(controller.volume, 0f, 220L)
+                controller.seekToPrevious()
+                controller.play()
+                controller.volume = 0f
+                fadePlayerVolume(0f, 1f, 260L)
+            } else {
+                controller.seekToPrevious()
+            }
+        }
     }
 
     /**
@@ -682,6 +1076,35 @@ class MusicViewModel @Inject constructor(
         _loopStart.value = null
         _loopEnd.value = null
         _loopEnabled.value = false
+    }
+
+    fun saveCurrentLoopPreset(name: String? = null) {
+        val songUri = _currentSong.value?.uri ?: return
+        val start = _loopStart.value ?: return
+        val end = _loopEnd.value ?: return
+        if (end <= start) return
+        val presetName = name?.trim().takeUnless { it.isNullOrBlank() }
+            ?: "Loop ${_loopPresetsForCurrentSong.value.size + 1}"
+        viewModelScope.launch {
+            dataStore.saveLoopPreset(songUri, LoopPreset(presetName, start, end))
+            refreshCurrentSongLoopPresets()
+        }
+    }
+
+    fun applyLoopPreset(name: String) {
+        val preset = _loopPresetsForCurrentSong.value.firstOrNull { it.name == name } ?: return
+        _loopStart.value = preset.startMs
+        _loopEnd.value = preset.endMs
+        _loopEnabled.value = true
+        seekTo(preset.startMs)
+    }
+
+    fun deleteLoopPreset(name: String) {
+        val songUri = _currentSong.value?.uri ?: return
+        viewModelScope.launch {
+            dataStore.removeLoopPreset(songUri, name)
+            refreshCurrentSongLoopPresets()
+        }
     }
 
     // ====== Category Functions ======
@@ -788,22 +1211,22 @@ class MusicViewModel @Inject constructor(
         progressUpdateJob = viewModelScope.launch {
             while (true) {
                 mediaController?.let {
-                    _progress.value = it.currentPosition
-                    _duration.value = it.duration
+                    val current = it.currentPosition
+                    val total = it.duration
+                    
+                    if (current >= 0) _progress.value = current
+                    if (total > 0) _duration.value = total
 
                     // Check A-B loop
                     if (_loopEnabled.value) {
                         val end = _loopEnd.value
                         val start = _loopStart.value
-                        if (end != null && start != null && it.currentPosition >= end) {
+                        if (end != null && start != null && current >= end) {
                             it.seekTo(start)
                         }
                     }
-
-                    // REMOVED: High-frequency DataStore save to prevent audio stutter ("gag")
-                    // We now strictly save on Pause, Stop, and Song Change.
                 }
-                delay(500L) // Update every 500ms for smoother progress
+                delay(100L) // Update every 100ms for 30fps smooth UI
             }
         }
     }
@@ -901,18 +1324,75 @@ class MusicViewModel @Inject constructor(
         mediaController?.removeMediaItem(index)
     }
 
+    fun playNextFromQueue(songUri: String) {
+        val controller = mediaController ?: return
+        val fromIndex = (0 until controller.mediaItemCount).firstOrNull {
+            controller.getMediaItemAt(it).localConfiguration?.uri.toString() == songUri
+        } ?: return
+        val targetIndex = (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount - 1)
+        controller.moveMediaItem(fromIndex, targetIndex)
+    }
+
+    fun playLaterFromQueue(songUri: String) {
+        val controller = mediaController ?: return
+        val fromIndex = (0 until controller.mediaItemCount).firstOrNull {
+            controller.getMediaItemAt(it).localConfiguration?.uri.toString() == songUri
+        } ?: return
+        val targetIndex = (controller.mediaItemCount - 1).coerceAtLeast(0)
+        controller.moveMediaItem(fromIndex, targetIndex)
+    }
+
+    fun removeUpcomingDuplicates() {
+        val controller = mediaController ?: return
+        val currentIndex = controller.currentMediaItemIndex
+        val seen = mutableSetOf<String>()
+        val toRemove = mutableListOf<Int>()
+        for (i in (currentIndex + 1) until controller.mediaItemCount) {
+            val uri = controller.getMediaItemAt(i).localConfiguration?.uri.toString()
+            if (!seen.add(uri)) {
+                toRemove.add(i)
+            }
+        }
+        toRemove.sortedDescending().forEach { controller.removeMediaItem(it) }
+    }
+
+    fun autoCleanQueue(removeShortAudio: Boolean = true, removeCallRecordings: Boolean = true) {
+        val controller = mediaController ?: return
+        val currentIndex = controller.currentMediaItemIndex
+        val toRemove = mutableListOf<Int>()
+        for (i in (currentIndex + 1) until controller.mediaItemCount) {
+            val uri = controller.getMediaItemAt(i).localConfiguration?.uri.toString()
+            val song = _songList.value.firstOrNull { it.uri == uri } ?: continue
+            val isShort = removeShortAudio && song.duration in 1..29_999
+            val path = song.folderPath.lowercase()
+            val isCallLike = removeCallRecordings && (
+                path.contains("/call/") ||
+                    path.contains("/record") ||
+                    path.contains("/voice") ||
+                    path.contains("whatsapp audio")
+                )
+            if (isShort || isCallLike) {
+                toRemove.add(i)
+            }
+        }
+        toRemove.sortedDescending().forEach { controller.removeMediaItem(it) }
+    }
+
     /**
      * Release MediaController on ViewModel clear
      */
     override fun onCleared() {
         super.onCleared()
         stopProgressUpdates()
+        cancelSleepTimer()
+        volumeFadeJob?.cancel()
         // Save final state
         viewModelScope.launch {
             _currentSong.value?.let { song ->
                 dataStore.savePlaybackState(
                     songUri = song.uri,
                     position = _progress.value,
+                    playbackSpeed = _playbackSpeed.value,
                     shuffleEnabled = _shuffleEnabled.value,
                     repeatMode = _repeatMode.value
                 )

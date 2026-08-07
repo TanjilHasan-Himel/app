@@ -43,13 +43,14 @@ fun AboutScreen(
 ) {
     val currentYear = Calendar.getInstance().get(Calendar.YEAR)
     val versionName = BuildConfig.VERSION_NAME ?: "1.0.0"
+    val releaseDate = "July 3, 2026"
     
     // State for Legal Dialogs
     var showEula by remember { mutableStateOf(false) }
     var showPrivacy by remember { mutableStateOf(false) }
 
     if (showEula) {
-        LegalDialog(title = "Terms of Service", content = Legals.EULA) { showEula = false }
+        LegalDialog(title = "Terms & Conditions", content = Legals.EULA) { showEula = false }
     }
     if (showPrivacy) {
         LegalDialog(title = "Privacy Policy", content = Legals.PRIVACY_POLICY) { showPrivacy = false }
@@ -95,7 +96,7 @@ fun AboutScreen(
         ) {
             // App Logo
             AsyncImage(
-                model = R.drawable.updateappicon,
+                model = R.drawable.audia_player,
                 contentDescription = "Audia Player Logo",
                 modifier = Modifier.size(120.dp)
             )
@@ -118,7 +119,15 @@ fun AboutScreen(
                 color = SoftGold
             )
 
-            Divider(
+            Text(
+                text = "Pulse Release • $releaseDate",
+                fontFamily = OutfitFontFamily,
+                fontWeight = FontWeight.Light,
+                fontSize = 12.sp,
+                color = TextSecondary
+            )
+
+            HorizontalDivider(
                 modifier = Modifier.fillMaxWidth(0.6f),
                 color = Color.White.copy(alpha = 0.1f),
                 thickness = 1.dp
@@ -145,7 +154,7 @@ fun AboutScreen(
                 )
             }
 
-            Divider(
+            HorizontalDivider(
                 modifier = Modifier.fillMaxWidth(0.6f),
                 color = Color.White.copy(alpha = 0.1f),
                 thickness = 1.dp
@@ -157,7 +166,7 @@ fun AboutScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 TextButton(onClick = { showEula = true }) {
-                    Text("Terms of Service", color = SoftGold, fontFamily = OutfitFontFamily)
+                    Text("Terms & Conditions", color = SoftGold, fontFamily = OutfitFontFamily)
                 }
                 TextButton(onClick = { showPrivacy = true }) {
                     Text("Privacy Policy", color = SoftGold, fontFamily = OutfitFontFamily)
@@ -178,7 +187,7 @@ fun AboutScreen(
 
             // Footer
             Text(
-                text = "© 2026 Audia Player\nAll rights reserved.",
+                text = "© $currentYear Audia Player\nUpdated: $releaseDate\nAll rights reserved.",
                 fontFamily = OutfitFontFamily,
                 fontWeight = FontWeight.Light,
                 fontSize = 12.sp,
@@ -212,7 +221,7 @@ fun LegalDialog(title: String, content: String, onDismiss: () -> Unit) {
                         Icon(Icons.Default.Close, "Close", tint = Color.Gray)
                     }
                 }
-                Divider(color = Color.White.copy(alpha = 0.1f))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                 
                 // Scrollable Content
                 Box(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {

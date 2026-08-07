@@ -17,6 +17,7 @@
 
     <!-- Wake Lock (Keep CPU alive during playback) -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Scheduler Permissions (USP Feature) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
@@ -31,12 +32,12 @@
     <application
         android:name="com.eplaytime.app.PlayTimeApp"
 
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
-        android:icon="@drawable/updateappicon"
+        android:icon="@drawable/audia_player"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/updateappicon"
+        android:roundIcon="@drawable/audia_player"
         android:supportsRtl="true"
         android:theme="@style/Theme.PlayTime">
 
@@ -83,6 +84,18 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+
+        <!-- Disable default WorkManager Initializer -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
 
     </application>
 

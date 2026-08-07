@@ -98,6 +98,22 @@ fun QueueScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AssistChip(
+                            onClick = { viewModel.removeUpcomingDuplicates() },
+                            label = { Text("De-dup", fontFamily = OutfitFontFamily, fontSize = 11.sp) }
+                        )
+                        AssistChip(
+                            onClick = { viewModel.autoCleanQueue(removeShortAudio = true, removeCallRecordings = true) },
+                            label = { Text("Auto Clean", fontFamily = OutfitFontFamily, fontSize = 11.sp) }
+                        )
+                    }
+                }
+
                 // Now Playing Header
                 currentSong?.let { song ->
                     item {
@@ -158,6 +174,8 @@ fun QueueScreen(
                         onRemove = {
                             viewModel.removeFromQueue(actualIndex)
                         },
+                        onPlayNext = { viewModel.playNextFromQueue(song.uri) },
+                        onPlayLater = { viewModel.playLaterFromQueue(song.uri) },
                         onClick = { viewModel.playSong(song.uri) }
                     )
                 }
@@ -178,6 +196,8 @@ private fun QueueItem(
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
+    onPlayNext: (() -> Unit)? = null,
+    onPlayLater: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -248,6 +268,12 @@ private fun QueueItem(
         // Reorder Controls (Only for Up Next items)
         if (onMoveUp != null && onMoveDown != null && onRemove != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { onPlayNext?.invoke() }) {
+                    Text("Next", fontFamily = OutfitFontFamily, fontSize = 10.sp, color = SoftGold)
+                }
+                TextButton(onClick = { onPlayLater?.invoke() }) {
+                    Text("Later", fontFamily = OutfitFontFamily, fontSize = 10.sp, color = TextSecondary)
+                }
                 // Move Up
                 IconButton(
                     onClick = onMoveUp,

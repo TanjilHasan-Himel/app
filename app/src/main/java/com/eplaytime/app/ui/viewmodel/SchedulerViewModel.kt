@@ -1,12 +1,12 @@
 package com.eplaytime.app.ui.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import android.content.Context
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eplaytime.app.data.dao.ScheduledTaskDao
-import com.eplaytime.app.data.database.PlayTimeDatabase
 import com.eplaytime.app.data.model.ScheduledTask
 import com.eplaytime.app.util.AlarmScheduler
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,11 +19,11 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class SchedulerViewModel @Inject constructor(
-    application: Application
-) : AndroidViewModel(application) {
+    private val taskDao: ScheduledTaskDao,
+    @ApplicationContext context: Context
+) : ViewModel() {
 
-    private val taskDao: ScheduledTaskDao = PlayTimeDatabase.getDatabase(application).scheduledTaskDao()
-    private val alarmScheduler = AlarmScheduler(application)
+    private val alarmScheduler = AlarmScheduler(context)
 
     private val _tasks = MutableStateFlow<List<ScheduledTask>>(emptyList())
     val tasks: StateFlow<List<ScheduledTask>> = _tasks.asStateFlow()

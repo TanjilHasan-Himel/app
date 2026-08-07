@@ -17,8 +17,8 @@ android {
         applicationId = "com.eplaytime.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 6
-        versionName = "5.1.0"
+        versionCode = 12
+        versionName = "8.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

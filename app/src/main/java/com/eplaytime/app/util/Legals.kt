@@ -2,11 +2,11 @@ package com.eplaytime.app.util
 
 object Legals {
     const val EULA = """
-TERMS OF SERVICE AND END USER LICENSE AGREEMENT (EULA)
+TERMS AND CONDITIONS AND END USER LICENSE AGREEMENT (EULA)
 App Name: Audia Player
 Developer: Tanjil Hasan Himel
-Version: 5.1.0
-Effective Date: February 2, 2026
+Version: 8.0.0
+Effective Date: March 27, 2026
 
 1. ACKNOWLEDGMENT AND ACCEPTANCE
 This End User License Agreement ("Agreement") is a binding legal contract between you ("User") and Tanjil Hasan Himel ("Developer"). By downloading, installing, or using the Audia Player mobile application ("the App"), you acknowledge that you have read, understood, and agree to be bound by these terms. If you do not agree to these terms, you are strictly prohibited from using the App and must uninstall it immediately.
@@ -62,7 +62,7 @@ For technical support, bug reports, or legal inquiries, please contact the Devel
 
     const val PRIVACY_POLICY = """
 PRIVACY POLICY
-App Name: Audia Player | Developer: Tanjil Hasan Himel | Version: 5.1.0 Effective Date: February 2, 2026
+App Name: Audia Player | Developer: Tanjil Hasan Himel | Version: 8.0.0 Effective Date: July 3, 2026
 
 1. OUR PRIVACY COMMITMENT
 Audia Player is designed with a "Data Sovereignty" philosophy. Unlike many modern applications, we do not monetize your data, track your location, or profile your listening habits.

@@ -4,16 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -25,10 +23,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -113,23 +109,29 @@ fun AlarmDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f)) // Dim background
-                .clickable(enabled = false) {} // Catch clicks
-                .padding(16.dp),
-            contentAlignment = Alignment.Center
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable(enabled = false) {}
+                .padding(16.dp)
         ) {
+            val dialogMaxHeight = maxHeight * 0.92f
+            val dialogWidthFraction = if (maxWidth < 360.dp) 0.99f else 0.95f
+
             Card(
                 modifier = Modifier
-                    .fillMaxWidth(0.95f)
+                    .align(Alignment.Center)
+                    .fillMaxWidth(dialogWidthFraction)
+                    .heightIn(max = dialogMaxHeight)
                     .clip(RoundedCornerShape(24.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E).copy(alpha = 0.95f)) // Glass-ish
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E).copy(alpha = 0.95f))
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Header
@@ -308,29 +310,29 @@ fun AlarmDialog(
             onDismissRequest = { showSearchOverlay = false },
             properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                // Dimmed background
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val sheetHeight = (maxHeight * 0.78f).coerceAtLeast(360.dp)
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = 0.5f))
                         .clickable { showSearchOverlay = false }
                 )
-                
-                // Bottom Sheet Content
+
                 Card(
                     modifier = Modifier
+                        .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(500.dp)
+                        .heightIn(max = sheetHeight)
                         .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                         .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E).copy(alpha = 0.98f))
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         // Drag Handle

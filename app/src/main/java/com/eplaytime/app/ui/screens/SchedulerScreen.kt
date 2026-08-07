@@ -15,7 +15,17 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
+import android.content.Context
+import android.content.Intent
+import android.app.Activity
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
+import android.os.Build
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.core.app.ActivityCompat
 import com.eplaytime.app.data.model.ScheduledTask
 import com.eplaytime.app.data.model.Song
 import com.eplaytime.app.ui.theme.*
@@ -51,6 +62,25 @@ fun SchedulerScreen(
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var alarmToEdit by remember { mutableStateOf<ScheduledTask?>(null) }
+    
+    val context = LocalContext.current
+    
+    var showBatteryWarning by remember { mutableStateOf(false) }
+    var showAlarmWarning by remember { mutableStateOf(false) }
+    var showNotificationWarning by remember { mutableStateOf(false) }
+    var dismissedBatteryWarningForSession by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            showBatteryWarning = !powerManager.isIgnoringBatteryOptimizations(context.packageName) && !dismissedBatteryWarningForSession
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val am = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            showAlarmWarning = !am.canScheduleExactAlarms()
+        }
+        showNotificationWarning = !NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
 
     Scaffold(
         topBar = {
@@ -98,8 +128,101 @@ fun SchedulerScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (tasks.isEmpty()) {
-                // Empty state
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (showBatteryWarning) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFC62828).copy(alpha = 0.2f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE53935).copy(alpha = 0.5f))
+                    ) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, contentDescription = "Warning", tint = Color(0xFFFFCDD2))
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Battery restriction detected", color = Color(0xFFFFCDD2), fontWeight = FontWeight.Bold, fontFamily = OutfitFontFamily)
+                                Text("Allow battery optimization bypass for more reliable scheduled playback.", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = OutfitFontFamily, lineHeight = 16.sp)
+                            }
+                            TextButton(onClick = {
+                                val activity = context as? Activity
+                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                try {
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                    context.startActivity(fallback)
+                                }
+                                dismissedBatteryWarningForSession = true
+                                showBatteryWarning = false
+                            }) {
+                                Text("OPEN", color = SoftGold, fontFamily = OutfitFontFamily, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+                
+                if (showAlarmWarning && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFC62828).copy(alpha = 0.2f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE53935).copy(alpha = 0.5f))
+                    ) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, contentDescription = "Warning", tint = Color(0xFFFFCDD2))
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Alarms Permission Denied", color = Color(0xFFFFCDD2), fontWeight = FontWeight.Bold, fontFamily = OutfitFontFamily)
+                                Text("Crucial for playing music exactly on time.", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = OutfitFontFamily)
+                            }
+                            TextButton(onClick = {
+                                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                context.startActivity(intent)
+                                showAlarmWarning = false
+                            }) {
+                                Text("ALLOW", color = SoftGold, fontFamily = OutfitFontFamily, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+                
+                if (showNotificationWarning) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE65100).copy(alpha = 0.2f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF9800).copy(alpha = 0.5f))
+                    ) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, contentDescription = "Warning", tint = Color(0xFFFFE0B2))
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Notifications Off", color = Color(0xFFFFE0B2), fontWeight = FontWeight.Bold, fontFamily = OutfitFontFamily)
+                                Text("Needed to keep the system awake during playback.", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = OutfitFontFamily)
+                            }
+                            TextButton(onClick = {
+                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                }
+                                context.startActivity(intent)
+                                showNotificationWarning = false
+                            }) {
+                                Text("SETTINGS", color = SoftGold, fontFamily = OutfitFontFamily, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (tasks.isEmpty()) {
+                        // Empty state
                 Column(
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -138,7 +261,9 @@ fun SchedulerScreen(
                         )
                     }
                 }
+                }
             }
+            } // Close added Column
         }
     }
 

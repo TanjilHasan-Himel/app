@@ -4,10 +4,9 @@ import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-
-import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.text.googlefonts.Font
+import androidx.compose.ui.text.googlefonts.GoogleFont
+import androidx.compose.ui.unit.sp
 import com.eplaytime.app.R
 
 val provider = GoogleFont.Provider(
@@ -16,36 +15,56 @@ val provider = GoogleFont.Provider(
     certificates = R.array.com_google_android_gms_fonts_certs
 )
 
-val Oswald = GoogleFont("Oswald")
-val OswaldFontFamily = FontFamily(
-    Font(googleFont = Oswald, fontProvider = provider)
+val OutfitFont = GoogleFont("Outfit")
+val GaladaFont = GoogleFont("Galada")
+val OswaldFont = GoogleFont("Oswald")
+
+val OutfitFontFamily = FontFamily(
+    Font(googleFont = OutfitFont, fontProvider = provider),
+    Font(googleFont = OutfitFont, fontProvider = provider, weight = FontWeight.Bold),
+    Font(googleFont = OutfitFont, fontProvider = provider, weight = FontWeight.Light),
+    Font(googleFont = OutfitFont, fontProvider = provider, weight = FontWeight.Medium)
 )
 
-// Outfit Font moved to Theme.kt to avoid duplication
+val GaladaFontFamily = FontFamily(
+    Font(googleFont = GaladaFont, fontProvider = provider)
+)
+
+val OswaldFontFamily = FontFamily(
+    Font(googleFont = OswaldFont, fontProvider = provider)
+)
 
 // Set of Material typography styles to start with
 val Typography = Typography(
     bodyLarge = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.5.sp
-    )
-    /* Other default text styles to override
+    ),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 22.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp
     ),
     labelSmall = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.5.sp
+    ),
+    headlineLarge = TextStyle(
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 32.sp
+    ),
+    headlineMedium = TextStyle( // Used in Greetings
+        fontFamily = GaladaFontFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 28.sp
     )
-    */
 )

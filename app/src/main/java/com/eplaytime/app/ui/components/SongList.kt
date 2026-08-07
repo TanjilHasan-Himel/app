@@ -1,5 +1,8 @@
 package com.eplaytime.app.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
+
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -39,7 +42,7 @@ fun SongList(
     currentSongId: Long?,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(0.dp),
+    contentPadding: PaddingValues = PaddingValues(bottom = 88.dp),
     state: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState()
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -116,18 +119,27 @@ fun SongList(
                 val itemModifier = Modifier.graphicsLayer {
                     val itemInfo = state.layoutInfo.visibleItemsInfo.find { it.key == song.id }
                     if (itemInfo != null) {
-                        val offset = itemInfo.offset
-                        // Start transforming when item is near the top (e.g., top 300px)
-                        if (offset < 300) {
-                            val normalized = (offset / 300f).coerceIn(0f, 1f)
-                            scaleX = 0.9f + (0.1f * normalized)
-                            scaleY = 0.9f + (0.1f * normalized)
-                            alpha = normalized
-                        } else {
-                            scaleX = 1f
-                            scaleY = 1f
-                            alpha = 1f
-                        }
+                        val viewportHeight = state.layoutInfo.viewportSize.height
+                        val itemCenter = itemInfo.offset + (itemInfo.size / 2)
+                        val normalizedCenter = itemCenter / viewportHeight.toFloat()
+                        
+                        // Rolodex logic
+                        val maxRotation = 25f // degrees
+                        val rotation = (normalizedCenter - 0.5f) * -maxRotation
+                        
+                        rotationX = rotation
+                        
+                        // Distance from center (0.0 = center, 0.5 = edge)
+                        val distanceFromCenter = kotlin.math.abs(normalizedCenter - 0.5f)
+                        
+                        // Subtle scale/alpha for depth
+                        val scale = 1f - (distanceFromCenter * 0.15f)
+                        scaleX = scale
+                        scaleY = scale
+                        alpha = 1f - (distanceFromCenter * 0.3f)
+                        
+                        // Perspective
+                        cameraDistance = 12f * density
                     }
                 }
 
@@ -150,6 +162,7 @@ fun SongList(
 
 // ... (existing content)
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun SongListItem(
     song: Song,
@@ -201,7 +214,8 @@ fun SongListItem(
                 fontSize = 16.sp,
                 color = if (isCurrentlyPlaying) SoftGold else TextPrimary,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(

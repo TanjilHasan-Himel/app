@@ -17,6 +17,12 @@ val SoftGold = Color(0xFFD4AF37)
 val SoftGoldDark = Color(0xFFB8962F)
 val SoftGoldLight = Color(0xFFE6C547)
 
+// Deep Ocean Glass theme for overlays and bottom sheets
+val OceanDark = Color(0xFF071923)
+val OceanDarkGlass = Color(0xCC071923)
+val NeonCyan = Color(0xFF2DE1FC)
+val NeonCyanDark = Color(0xFF1BB8D0)
+
 // Neon Blue Alternative
 val NeonBlue = Color(0xFF2DE1FC)
 val NeonBlueDark = Color(0xFF1BB8D0)

@@ -36,27 +36,22 @@ class AlarmScheduler(private val context: Context) {
         }
 
         val alarmIntent = createAlarmIntent(task)
-        val triggerTime = calculateTriggerTime(task.hour, task.minute)
+        val triggerTime = calculateTriggerTime(task)
 
         try {
-            Log.d(TAG, "📍 Scheduling ALARM_CLOCK for task ${task.id} at ${formatTime(task.hour, task.minute)}")
+            Log.d(TAG, "📍 Scheduling exact playback for task ${task.id} at ${formatTime(task.hour, task.minute)}")
             
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // Android 12+: Use setAlarmClock (most reliable)
-                val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerTime, alarmIntent)
-                alarmManager.setAlarmClock(alarmClockInfo, alarmIntent)
-            } else {
-                // Fallback for older Android: setExactAndAllowWhileIdle
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerTime,
-                    alarmIntent
-                )
-            }
+            // Use setAlarmClock (the TRUE alarm clock API) for rock-solid reliability
+            // This API guarantees the device WILL wake up, just like a system alarm clock
+            val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerTime, alarmIntent)
+            alarmManager.setAlarmClock(
+                alarmClockInfo,
+                alarmIntent
+            )
 
-            Log.d(TAG, "✓ Alarm scheduled successfully for task ${task.id}")
+            Log.d(TAG, "✓ Scheduled playback set successfully for task ${task.id}")
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error scheduling alarm for task ${task.id}", e)
+            Log.e(TAG, "❌ Error scheduling playback for task ${task.id}", e)
         }
     }
 
@@ -89,6 +84,7 @@ class AlarmScheduler(private val context: Context) {
             action = AlarmReceiver.ACTION_SCHEDULED_PLAYBACK
             putExtra(AlarmReceiver.EXTRA_SONG_URI, task.songUri)
             putExtra(AlarmReceiver.EXTRA_ALARM_ID, task.id)
+            putExtra(AlarmReceiver.EXTRA_TARGET_VOLUME, task.targetVolume)
         }
 
         return PendingIntent.getBroadcast(
@@ -101,19 +97,50 @@ class AlarmScheduler(private val context: Context) {
 
     /**
      * Calculate trigger time for alarm
-     * If time has passed today, schedule for tomorrow
+     * Automatically handles repeat days to schedule on the exact next occurrence
      */
-    private fun calculateTriggerTime(hour: Int, minute: Int): Long {
+    private fun calculateTriggerTime(task: ScheduledTask): Long {
         val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, hour)
-            set(Calendar.MINUTE, minute)
+            set(Calendar.HOUR_OF_DAY, task.hour)
+            set(Calendar.MINUTE, task.minute)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
+        }
 
-            // If time has already passed today, schedule for tomorrow
-            if (timeInMillis <= System.currentTimeMillis()) {
-                add(Calendar.DAY_OF_MONTH, 1)
+        if (task.repeatDays.isBlank()) {
+            // One-time alarm
+            if (calendar.timeInMillis <= System.currentTimeMillis()) {
+                calendar.add(Calendar.DAY_OF_MONTH, 1)
             }
+            return calendar.timeInMillis
+        }
+
+        val selectedDays = task.repeatDays
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+
+        val dayMap = mapOf(
+            Calendar.SUNDAY to "SUN",
+            Calendar.MONDAY to "MON",
+            Calendar.TUESDAY to "TUE",
+            Calendar.WEDNESDAY to "WED",
+            Calendar.THURSDAY to "THU",
+            Calendar.FRIDAY to "FRI",
+            Calendar.SATURDAY to "SAT"
+        )
+
+        var daysAdded = 0
+        while (daysAdded < 7) {
+            val currentDayStr = dayMap[calendar.get(Calendar.DAY_OF_WEEK)]
+            if (selectedDays.contains(currentDayStr)) {
+                if (daysAdded > 0 || calendar.timeInMillis > System.currentTimeMillis()) {
+                    return calendar.timeInMillis
+                }
+            }
+            calendar.add(Calendar.DAY_OF_MONTH, 1)
+            daysAdded++
         }
 
         return calendar.timeInMillis
