@@ -1,5 +1,7 @@
 package com.eplaytime.app.service
 
+import com.eplaytime.app.R
+
 import android.content.Intent
 import android.os.Bundle
 import androidx.annotation.OptIn
@@ -79,7 +81,7 @@ class MusicService : MediaLibraryService() {
                 try {
                     val nm = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        val channel = android.app.NotificationChannel("playtime_al", "PlayTime Scheduler", android.app.NotificationManager.IMPORTANCE_LOW)
+                        val channel = android.app.NotificationChannel("playtime_al", "Audia Player Scheduler", android.app.NotificationManager.IMPORTANCE_LOW)
                         nm.createNotificationChannel(channel)
                     }
                     val notification = androidx.core.app.NotificationCompat.Builder(this, "playtime_al")
@@ -95,7 +97,7 @@ class MusicService : MediaLibraryService() {
                 val songTitle = intent.getStringExtra("extra_song_title") ?: "Alarm Playback"
                 val metadata = androidx.media3.common.MediaMetadata.Builder()
                     .setTitle(songTitle)
-                    .setArtist("PlayTime Scheduler")
+                    .setArtist("Audia Player Scheduler")
                     .build()
 
                 val item = MediaItem.Builder()

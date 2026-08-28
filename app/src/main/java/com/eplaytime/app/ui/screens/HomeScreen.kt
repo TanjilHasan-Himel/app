@@ -154,7 +154,7 @@ fun HomeScreen(
                     color = TextPrimary
                 )
                 Text(
-                    text = "PlayTime needs access to your music files to play them.",
+                    text = "Audia Player needs access to your music files to play them.",
                     fontFamily = OutfitFontFamily,
                     fontWeight = FontWeight.Light,
                     fontSize = 14.sp,

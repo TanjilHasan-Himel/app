@@ -21,6 +21,9 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import android.widget.Toast
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -546,8 +549,26 @@ private fun TimeStepper(
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, fontSize = 12.sp, color = Color.White.copy(alpha = 0.5f))
         Spacer(modifier = Modifier.height(4.dp))
+        var dragAccumulator by remember { mutableFloatStateOf(0f) }
         Container(
-             modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.3f))
+             modifier = Modifier
+                 .clip(RoundedCornerShape(12.dp))
+                 .background(Color.Black.copy(alpha = 0.3f))
+                 .pointerInput(Unit) {
+                     detectVerticalDragGestures(
+                         onDragEnd = { dragAccumulator = 0f }
+                     ) { change, dragAmount ->
+                         change.consume()
+                         dragAccumulator += dragAmount
+                         if (dragAccumulator > 30f) { // Swiped down (decrement)
+                             onDecrement()
+                             dragAccumulator = 0f
+                         } else if (dragAccumulator < -30f) { // Swiped up (increment)
+                             onIncrement()
+                             dragAccumulator = 0f
+                         }
+                     }
+                 }
         ) {
              Column(horizontalAlignment = Alignment.CenterHorizontally) {
                  IconButton(onClick = onIncrement) {

@@ -2,12 +2,13 @@ package com.eplaytime.app.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
-
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,6 +21,8 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
@@ -71,10 +74,6 @@ import android.provider.Settings
 import android.net.Uri
 import androidx.compose.ui.res.painterResource
 
-/**
- * PlayerScreen - Full-screen Glass Player with A-B Loop
- * Rich & Soft aesthetic with Outfit font and blurred background
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PlayerScreen(
@@ -93,6 +92,14 @@ fun PlayerScreen(
     val loopEnabled by viewModel.loopEnabled.collectAsState()
     val allFavorites by viewModel.allFavorites.collectAsState(initial = emptyList())
     val audioSessionId by viewModel.audioSessionId.collectAsState()
+
+    var toastMessage by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(toastMessage) {
+        if (toastMessage != null) {
+            kotlinx.coroutines.delay(500)
+            toastMessage = null
+        }
+    }
     val visualizerStyle by viewModel.visualizerStyle.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
     val stopAfterCurrent by viewModel.stopAfterCurrent.collectAsState()
@@ -104,17 +111,11 @@ fun PlayerScreen(
     var sleepMinutesInput by remember { mutableStateOf("30") }
     var showAudioEffectsSheet by remember { mutableStateOf(false) }
 
-    var showSettingsDialog by remember { mutableStateOf(false) } // if needed later
+    var showSettingsDialog by remember { mutableStateOf(false) } 
     var isZenModeEnabled by remember { mutableStateOf(false) }
 
-    // Visualizer State
     val context = LocalContext.current
-    // Check if current song is favorited
-    val isFavorite = currentSong?.let { song ->
-        allFavorites.any { it.uri == song.uri }
-    } ?: false
-
-    // Dynamic Palette
+    
     var dynamicAccentColor by remember { mutableStateOf(SoftGold) }
     var dynamicBgColor by remember { mutableStateOf(Color.Black) }
 
@@ -149,10 +150,21 @@ fun PlayerScreen(
     val animatedAccentColor by animateColorAsState(targetValue = dynamicAccentColor, tween(1000))
     val animatedBgColor by animateColorAsState(targetValue = dynamicBgColor, tween(1000))
 
-    // Redirect back if no song
     if (currentSong == null) {
         SideEffect { onNavigateBack() }
         return
+    }
+
+    var vinylRotation by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            while (true) {
+                withFrameMillis {
+                    vinylRotation += 0.5f
+                    if (vinylRotation >= 360f) vinylRotation -= 360f
+                }
+            }
+        }
     }
 
     Box(
@@ -160,55 +172,53 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(animatedBgColor, Color.Black)))
     ) {
-        // Blurred Background Album Art
-            val albumArtModel = remember(currentSong?.albumArtUri) {
-                val artUri = currentSong?.albumArtUri
-                if (!artUri.isNullOrBlank()) {
-                    ImageRequest.Builder(context)
-                        .data(artUri)
-                        .crossfade(true)
-                        .placeholder(R.drawable.audia_player_logo)
-                        .error(R.drawable.audia_player_logo)
-                        .fallback(R.drawable.audia_player_logo)
-                        .build()
-                } else {
-                    R.drawable.audia_player_logo
-                }
+        val albumArtModel = remember(currentSong?.albumArtUri) {
+            val artUri = currentSong?.albumArtUri
+            if (!artUri.isNullOrBlank()) {
+                ImageRequest.Builder(context)
+                    .data(artUri)
+                    .crossfade(true)
+                    .placeholder(R.drawable.audia_player_logo)
+                    .error(R.drawable.audia_player_logo)
+                    .fallback(R.drawable.audia_player_logo)
+                    .build()
+            } else {
+                R.drawable.audia_player_logo
             }
+        }
 
-            SubcomposeAsyncImage(
-                model = albumArtModel,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(60.dp)
-                    .alpha(0.5f),
-                contentScale = ContentScale.Crop,
-                loading = {
-                    Image(
-                        painter = painterResource(R.drawable.audia_player_logo),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                        alpha = 0.25f
-                    )
-                },
-                error = {
-                    Image(
-                        painter = painterResource(R.drawable.audia_player_logo),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                        alpha = 0.25f
-                    )
-                }
-            )
+        SubcomposeAsyncImage(
+            model = albumArtModel,
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(80.dp)
+                .alpha(0.4f),
+            contentScale = ContentScale.Crop,
+            loading = {
+                Image(
+                    painter = painterResource(R.drawable.audia_player_logo),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    alpha = 0.2f
+                )
+            },
+            error = {
+                Image(
+                    painter = painterResource(R.drawable.audia_player_logo),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    alpha = 0.2f
+                )
+            }
+        )
         
-        // Dark Overlay (opacity depending on zen mode)
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = if (isZenModeEnabled) 0.3f else 0.5f))
+                .background(Color.Black.copy(alpha = if (isZenModeEnabled) 0.3f else 0.4f))
         )
 
         Column(
@@ -222,426 +232,320 @@ fun PlayerScreen(
             if (!isZenModeEnabled) {
                 // Header
                 Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Close",
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-                
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(
-                        onClick = { isZenModeEnabled = true },
-                        modifier = Modifier.size(28.dp)
-                    ) {
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Default.Brightness3,
-                            contentDescription = "Zen Mode",
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Close",
                             tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(32.dp)
                         )
                     }
-                    Text(
-                        text = "NOW PLAYING",
-                        fontFamily = OutfitFontFamily,
-                        fontWeight = FontWeight.Light,
-                        fontSize = 12.sp,
-                        letterSpacing = 3.sp,
-                        color = TextSecondary
-                    )
+                    
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = { isZenModeEnabled = true },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Brightness3,
+                                contentDescription = "Zen Mode",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Text(
+                            text = "NOW PLAYING",
+                            fontFamily = OutfitFontFamily,
+                            fontWeight = FontWeight.Light,
+                            fontSize = 12.sp,
+                            letterSpacing = 3.sp,
+                            color = TextSecondary
+                        )
+                    }
+                    
+                    IconButton(onClick = onNavigateToQueue) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                            contentDescription = "Queue",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+                val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+                val coverSize = (screenWidth * 0.8f)
+                    .coerceAtMost(screenHeight * 0.45f)
+                    .coerceIn(240.dp, 350.dp)
+                    
+                val animatedScale by animateFloatAsState(
+                    targetValue = if (isPlaying) 1f else 0.9f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                    label = "AlbumArtScale"
+                )
                 
-                IconButton(onClick = onNavigateToQueue) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                        contentDescription = "Queue",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-            } // Close if (!isZenModeEnabled)
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // ================= NEW CENTRAL VISUAL =================
-            val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-            val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-            val coverSize = (screenWidth * 0.85f)
-                .coerceAtMost(screenHeight * 0.45f)
-                .coerceIn(260.dp, 380.dp)
-                
-            // Apple Music Style: Scale down smoothly when paused
-            val animatedScale by animateFloatAsState(
-                targetValue = if (isPlaying) 1f else 0.85f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessLow
-                ),
-                label = "AlbumArtScale"
-            )
-            
-            // Soft floating shadow
-            val shadowElevation by androidx.compose.animation.core.animateDpAsState(
-                targetValue = if (isPlaying) 32.dp else 12.dp,
-                animationSpec = tween(500),
-                label = "AlbumArtShadow"
-            )
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                // Sleek Floating Card
                 Box(
-                    modifier = Modifier
-                        .size(coverSize)
-                        .scale(animatedScale)
-                        .shadow(
-                            elevation = shadowElevation,
-                            shape = RoundedCornerShape(24.dp),
-                            spotColor = animatedAccentColor,
-                            ambientColor = animatedAccentColor.copy(alpha = 0.5f)
-                        )
-                        .clip(RoundedCornerShape(24.dp))
-                ) {
-                    SubcomposeAsyncImage(
-                        model = albumArtModel,
-                        contentDescription = "Album Art",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                        loading = {
-                            Image(
-                                painter = painterResource(R.drawable.audia_player_logo),
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        },
-                        error = {
-                            Image(
-                                painter = painterResource(R.drawable.audia_player_logo),
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            if (!isZenModeEnabled) {
-                // Song Info
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.Start
-            ) {
-                Text(
-                    text = currentSong?.title ?: "Unknown Title",
-                    fontFamily = OutfitFontFamily,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 24.sp,
-                    color = TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = currentSong?.artist ?: "Unknown Artist",
-                    fontFamily = OutfitFontFamily,
-                    fontWeight = FontWeight.Light,
-                    fontSize = 16.sp,
-                    color = animatedAccentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(36.dp))
-
-            // Progress Slider with A-B Loop markers
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    PremiumProgressBar(
-                        progress = progress,
-                        duration = duration,
-                        loopA = loopStart,
-                        loopB = loopEnd,
-                        onSeek = { viewModel.seekTo(it) },
-                        accentColor = animatedAccentColor,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // A-B Loop markers
-                    if (loopStart != null && duration > 0) {
-                        val startPercent = (loopStart!! / duration.toFloat())
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(startPercent)
-                                .align(Alignment.CenterStart)
-                                .padding(start = 16.dp)
-                        ) {
-                            Text(
-                                text = "A",
-                                color = animatedAccentColor,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.align(Alignment.CenterEnd)
-                            )
-                        }
-                    }
-                    if (loopEnd != null && duration > 0) {
-                        val endPercent = (loopEnd!! / duration.toFloat())
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(endPercent)
-                                .align(Alignment.CenterStart)
-                                .padding(start = 16.dp)
-                        ) {
-                            Text(
-                                text = "B",
-                                color = animatedAccentColor,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.align(Alignment.CenterEnd)
-                            )
-                        }
-                    }
-                }
-
-                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = formatDurationFull(progress),
-                        fontFamily = OutfitFontFamily,
-                        fontWeight = FontWeight.Light,
-                        color = TextSecondary,
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        text = "-${formatDurationFull((duration - progress).coerceAtLeast(0L))}",
-                        fontFamily = OutfitFontFamily,
-                        fontWeight = FontWeight.Light,
-                        color = TextSecondary,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Secondary Controls Row (Shuffle, Repeat, A-B Loop, Favorite)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Shuffle
-                IconButton(onClick = { viewModel.toggleShuffle() }) {
-                    Icon(
-                        imageVector = Icons.Default.Shuffle,
-                        contentDescription = "Shuffle",
-                        tint = if (shuffleEnabled) animatedAccentColor else TextTertiary
-                    )
-                }
-
-                // A-B Loop Toggle
-                IconButton(onClick = { viewModel.toggleABLoop() }) {
-                    val loopText = when {
-                        loopEnabled -> "A-B"
-                        loopStart != null -> "A"
-                        else -> "A-B"
-                    }
-                    val loopColor = when {
-                        loopEnabled -> animatedAccentColor
-                        loopStart != null -> animatedAccentColor.copy(alpha = 0.6f)
-                        else -> TextTertiary
-                    }
-                    Text(
-                        text = loopText,
-                        fontFamily = OutfitFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = loopColor
-                    )
-                }
-
-                // Repeat
-                IconButton(onClick = { viewModel.cycleRepeatMode() }) {
-                    val repeatIcon = if (repeatMode == Player.REPEAT_MODE_ONE) {
-                        Icons.Default.RepeatOne
-                    } else {
-                        Icons.Default.Repeat
-                    }
-                    Icon(
-                        imageVector = repeatIcon,
-                        contentDescription = "Repeat",
-                        tint = if (repeatMode != Player.REPEAT_MODE_OFF) animatedAccentColor else TextTertiary
-                    )
-                }
-
-                // Favorite
-                val isFavorite = currentSong?.let { song ->
-                    allFavorites.any { it.uri == song.uri }
-                } ?: false
-                
-                FavoriteButton(
-                    isFavorite = isFavorite,
-                    onToggle = { currentSong?.let { viewModel.toggleFavorite(it) } }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Premium utilities in icon-style options under the control icons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Sleep Timer
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(onClick = { showSleepDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Bedtime,
-                            contentDescription = "Sleep Timer",
-                            tint = if (sleepTimerRemainingMs != null) animatedAccentColor else TextSecondary
-                        )
-                    }
-                    Text(
-                        text = if (sleepTimerRemainingMs == null) "Sleep" else formatDurationFull(sleepTimerRemainingMs ?: 0L),
-                        fontFamily = OutfitFontFamily,
-                        fontSize = 10.sp,
-                        color = TextSecondary
-                    )
-                }
-
-                // Equalizer
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(onClick = { showAudioEffectsSheet = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Tune,
-                            contentDescription = "Audio Effects",
-                            tint = animatedAccentColor
-                        )
-                    }
-                    Text(
-                        text = "FX",
-                        fontFamily = OutfitFontFamily,
-                        fontSize = 10.sp,
-                        color = TextSecondary
-                    )
-                }
-
-                // Playback Speed
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(onClick = { viewModel.cyclePlaybackSpeed() }) {
-                        Icon(
-                            imageVector = Icons.Default.Speed,
-                            contentDescription = "Playback Speed",
-                            tint = animatedAccentColor
-                        )
-                    }
-                    Text(
-                        text = String.format(Locale.US, "%.2fx", playbackSpeed),
-                        fontFamily = OutfitFontFamily,
-                        fontSize = 10.sp,
-                        color = TextSecondary
-                    )
-                }
-
-                // Fade Toggle
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(onClick = { viewModel.toggleFadeOnPlayPause() }) {
-                        Icon(
-                            imageVector = Icons.Default.BlurOn,
-                            contentDescription = "Fade",
-                            tint = if (fadeOnPlayPause) animatedAccentColor else TextSecondary
-                        )
-                    }
-                    Text(
-                        text = if (fadeOnPlayPause) "Fade On" else "Fade Off",
-                        fontFamily = OutfitFontFamily,
-                        fontSize = 10.sp,
-                        color = TextSecondary
-                    )
-                }
-
-                // Save Loop
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(
-                        onClick = { viewModel.saveCurrentLoopPreset() },
-                        enabled = loopStart != null && loopEnd != null
+                    Box(
+                        modifier = Modifier
+                            .size(coverSize)
+                            .scale(animatedScale)
+                            .graphicsLayer { rotationZ = vinylRotation }
+                            .shadow(24.dp, CircleShape, spotColor = animatedAccentColor, ambientColor = animatedAccentColor.copy(alpha = 0.5f))
+                            .border(4.dp, Color.White.copy(alpha = 0.05f), CircleShape)
+                            .clip(CircleShape),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.BookmarkAdd,
-                            contentDescription = "Save Loop",
-                            tint = if (loopStart != null && loopEnd != null) animatedAccentColor else TextSecondary
+                        SubcomposeAsyncImage(
+                            model = albumArtModel,
+                            contentDescription = "Album Art",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                            loading = {
+                                Image(
+                                    painter = painterResource(R.drawable.audia_player_logo),
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            },
+                            error = {
+                                Image(
+                                    painter = painterResource(R.drawable.audia_player_logo),
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(coverSize * 0.15f)
+                                .shadow(8.dp, CircleShape)
+                                .clip(CircleShape)
+                                .background(Color.Black)
+                                .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
-                        text = "Loop+",
+                        text = currentSong?.title ?: "Unknown Title",
                         fontFamily = OutfitFontFamily,
-                        fontSize = 10.sp,
-                        color = TextSecondary
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 28.sp,
+                        color = TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = currentSong?.artist ?: "Unknown Artist",
+                        fontFamily = OutfitFontFamily,
+                        fontWeight = FontWeight.Light,
+                        fontSize = 18.sp,
+                        color = animatedAccentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                     )
                 }
-            }
 
-            if (loopPresets.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    loopPresets.take(3).forEach { preset ->
-                        FilterChip(
-                            selected = false,
-                            onClick = { viewModel.applyLoopPreset(preset.name) },
-                            label = { Text(preset.name, fontFamily = OutfitFontFamily, fontSize = 10.sp) }
+                Spacer(modifier = Modifier.weight(1f))
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        PremiumProgressBar(
+                            progress = progress,
+                            duration = duration,
+                            loopA = loopStart,
+                            loopB = loopEnd,
+                            onSeek = { viewModel.seekTo(it) },
+                            accentColor = animatedAccentColor,
+                            modifier = Modifier.fillMaxWidth()
                         )
+                        if (loopStart != null && duration > 0) {
+                            val startPercent = (loopStart!! / duration.toFloat())
+                            Box(modifier = Modifier.fillMaxWidth(startPercent).align(Alignment.CenterStart).padding(start = 16.dp)) {
+                                Text("A", color = animatedAccentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterEnd))
+                            }
+                        }
+                        if (loopEnd != null && duration > 0) {
+                            val endPercent = (loopEnd!! / duration.toFloat())
+                            Box(modifier = Modifier.fillMaxWidth(endPercent).align(Alignment.CenterStart).padding(start = 16.dp)) {
+                                Text("B", color = animatedAccentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterEnd))
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(formatDurationFull(progress), fontFamily = OutfitFontFamily, fontWeight = FontWeight.Light, color = TextSecondary, fontSize = 12.sp)
+                        Text("-${formatDurationFull((duration - progress).coerceAtLeast(0L))}", fontFamily = OutfitFontFamily, fontWeight = FontWeight.Light, color = TextSecondary, fontSize = 12.sp)
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Main Playback Controls
-            com.eplaytime.app.ui.components.PlayerControls(
-                isPlaying = isPlaying,
-                onPlayPause = { viewModel.togglePlayPause() },
-                onPrevious = { viewModel.playPrevious() },
-                onNext = { viewModel.playNext() },
-                onSeekBackward = { 
-                    viewModel.seekTo((progress - 5000).coerceAtLeast(0))
-                },
-                onSeekForward = { 
-                    viewModel.seekTo((progress + 5000).coerceAtMost(duration))
+                Box(modifier = Modifier.fillMaxWidth().height(24.dp), contentAlignment = Alignment.Center) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = toastMessage != null,
+                        enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(50)),
+                        exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(200))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .wrapContentSize(unbounded = true)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color.Black.copy(alpha = 0.6f))
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Text(toastMessage ?: "", color = animatedAccentColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, fontFamily = OutfitFontFamily)
+                        }
+                    }
                 }
-            )
 
-            Spacer(modifier = Modifier.height(32.dp))
-            } // End of if(!isZenMode)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { 
+                        viewModel.toggleShuffle() 
+                        toastMessage = if (!shuffleEnabled) "Shuffle Enabled" else "Shuffle Disabled"
+                    }) {
+                        Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = if (shuffleEnabled) animatedAccentColor else TextTertiary)
+                    }
 
+                    IconButton(onClick = { 
+                        viewModel.toggleABLoop()
+                        val msg = when {
+                            loopEnabled -> "A-B Loop Cleared"
+                            loopStart != null -> "Loop End (B) Set"
+                            else -> "Loop Start (A) Set"
+                        }
+                        toastMessage = msg
+                    }) {
+                        val loopText = when {
+                            loopEnabled -> "A-B"
+                            loopStart != null -> "A"
+                            else -> "A-B"
+                        }
+                        val loopColor = when {
+                            loopEnabled -> animatedAccentColor
+                            loopStart != null -> animatedAccentColor.copy(alpha = 0.6f)
+                            else -> TextTertiary
+                        }
+                        Text(loopText, fontFamily = OutfitFontFamily, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = loopColor)
+                    }
+
+                    IconButton(onClick = { 
+                        viewModel.cycleRepeatMode() 
+                        val nextMode = when(repeatMode) {
+                            Player.REPEAT_MODE_OFF -> "Repeat All"
+                            Player.REPEAT_MODE_ALL -> "Repeat One"
+                            else -> "Repeat Off"
+                        }
+                        toastMessage = nextMode
+                    }) {
+                        val repeatIcon = if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat
+                        Icon(repeatIcon, contentDescription = "Repeat", tint = if (repeatMode != Player.REPEAT_MODE_OFF) animatedAccentColor else TextTertiary)
+                    }
+
+                    val isFavorite = currentSong?.let { song -> allFavorites.any { it.uri == song.uri } } ?: false
+                    FavoriteButton(
+                        isFavorite = isFavorite,
+                        onToggle = { 
+                            currentSong?.let { 
+                                viewModel.toggleFavorite(it) 
+                                toastMessage = if (isFavorite) "Removed from Favorites" else "Added to Favorites"
+                            } 
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = { showSleepDialog = true }) {
+                            Icon(Icons.Default.Bedtime, contentDescription = "Sleep", tint = if (sleepTimerRemainingMs != null) animatedAccentColor else TextSecondary)
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = { showAudioEffectsSheet = true }) {
+                            Icon(Icons.Default.Tune, contentDescription = "FX", tint = animatedAccentColor)
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = { 
+                            viewModel.cyclePlaybackSpeed() 
+                            val speedStr = when(playbackSpeed) {
+                                1.0f -> "1.25x"
+                                1.25f -> "1.5x"
+                                1.5f -> "2.0x"
+                                2.0f -> "0.5x"
+                                0.5f -> "0.75x"
+                                0.75f -> "1.0x"
+                                else -> "1.0x"
+                            }
+                            toastMessage = "Speed: $speedStr"
+                        }) {
+                            Icon(Icons.Default.Speed, contentDescription = "Speed", tint = animatedAccentColor)
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = { 
+                            viewModel.toggleFadeOnPlayPause() 
+                            toastMessage = if (!fadeOnPlayPause) "Fade Enabled" else "Fade Disabled"
+                        }) {
+                            Icon(Icons.Default.BlurOn, contentDescription = "Fade", tint = if (fadeOnPlayPause) animatedAccentColor else TextSecondary)
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = { 
+                            viewModel.saveCurrentLoopPreset() 
+                            toastMessage = "Loop Preset Saved"
+                        }, enabled = loopStart != null && loopEnd != null) {
+                            Icon(Icons.Default.BookmarkAdd, contentDescription = "Loop+", tint = if (loopStart != null && loopEnd != null) animatedAccentColor else TextSecondary)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                PlayerControls(
+                    isPlaying = isPlaying,
+                    onPlayPause = { viewModel.togglePlayPause() },
+                    onPrevious = { viewModel.playPrevious() },
+                    onNext = { viewModel.playNext() },
+                    onSeekBackward = { viewModel.seekTo((progress - 5000).coerceAtLeast(0)) },
+                    onSeekForward = { viewModel.seekTo((progress + 5000).coerceAtMost(duration)) }
+                )
+            } 
             if (isZenModeEnabled) {
-                // Minimalist Zen Controls
                 Spacer(modifier = Modifier.weight(1f))
                 
-                // Huge Clock
                 val calendar = Calendar.getInstance()
                 val timeFormat = java.text.SimpleDateFormat("hh:mm", Locale.US)
                 val amPmFormat = java.text.SimpleDateFormat("a", Locale.US)
@@ -677,7 +581,6 @@ fun PlayerScreen(
 
                 Spacer(modifier = Modifier.height(48.dp))
 
-                // Single Play/Pause Button
                 Box(
                     modifier = Modifier
                         .size(90.dp)
@@ -701,58 +604,40 @@ fun PlayerScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("Exit Zen Mode", color = Color.White.copy(alpha = 0.7f), fontFamily = OutfitFontFamily)
                 }
-            } // End Zen Mode
+            } 
         }
 
         if (showSleepDialog) {
             val stopAfterSong by viewModel.stopAfterCurrentSong.collectAsState()
             AlertDialog(
                 onDismissRequest = { showSleepDialog = false },
-                title = {
-                    Text("Sleep Timer", fontFamily = OutfitFontFamily, fontWeight = FontWeight.SemiBold)
-                },
+                title = { Text("Sleep Timer", fontFamily = OutfitFontFamily, fontWeight = FontWeight.SemiBold) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // Stop After This Song - prominent row
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-                                .background(
-                                    if (stopAfterSong) animatedAccentColor.copy(alpha = 0.15f)
-                                    else Color.White.copy(alpha = 0.05f)
-                                )
+                                .clip(shape = RoundedCornerShape(12.dp))
+                                .background(if (stopAfterSong) animatedAccentColor.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f))
                                 .clickable { viewModel.toggleStopAfterCurrentSong(); showSleepDialog = false }
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text(
-                                    "Stop after this song",
-                                    fontFamily = OutfitFontFamily,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (stopAfterSong) animatedAccentColor else Color.White
-                                )
-                                Text(
-                                    if (stopAfterSong) "Active — will stop when song ends" else "Pause when current song finishes",
-                                    fontFamily = OutfitFontFamily,
-                                    fontSize = 12.sp,
-                                    color = TextSecondary
-                                )
+                                Text("Stop after this song", fontFamily = OutfitFontFamily, fontWeight = FontWeight.Medium, color = if (stopAfterSong) animatedAccentColor else Color.White)
+                                Text(if (stopAfterSong) "Active ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â will stop when song ends" else "Pause when current song finishes", fontFamily = OutfitFontFamily, fontSize = 12.sp, color = TextSecondary)
                             }
-                            Icon(
-                                imageVector = if (stopAfterSong) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                contentDescription = null,
-                                tint = if (stopAfterSong) animatedAccentColor else TextSecondary,
-                                modifier = Modifier.size(22.dp)
-                            )
+                            Icon(if (stopAfterSong) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = if (stopAfterSong) animatedAccentColor else TextSecondary, modifier = Modifier.size(22.dp))
                         }
 
-                        Divider(color = Color.White.copy(alpha = 0.1f))
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
                         Text("Or set a timer:", fontFamily = OutfitFontFamily, fontSize = 13.sp, color = TextSecondary)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             AssistChip(onClick = { sleepMinutesInput = "15" }, label = { Text("15m") })
                             AssistChip(onClick = { sleepMinutesInput = "30" }, label = { Text("30m") })
                             AssistChip(onClick = { sleepMinutesInput = "45" }, label = { Text("45m") })
@@ -772,9 +657,7 @@ fun PlayerScreen(
                         val mins = sleepMinutesInput.toIntOrNull()?.coerceAtLeast(1) ?: 30
                         viewModel.startSleepTimer(minutes = mins, fadeOut = true)
                         showSleepDialog = false
-                    }) {
-                        Text("Start Timer")
-                    }
+                    }) { Text("Start Timer") }
                 },
                 dismissButton = {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -782,9 +665,7 @@ fun PlayerScreen(
                             viewModel.cancelSleepTimer()
                             if (viewModel.stopAfterCurrentSong.value) viewModel.toggleStopAfterCurrentSong()
                             showSleepDialog = false
-                        }) {
-                            Text("Cancel")
-                        }
+                        }) { Text("Cancel") }
                         TextButton(onClick = { showSleepDialog = false }) { Text("Close") }
                     }
                 }
@@ -792,43 +673,19 @@ fun PlayerScreen(
         }
 
         if (showAudioEffectsSheet) {
-            AudioEffectsSheet(
-                audioSessionId = audioSessionId,
-                viewModel = viewModel,
-                onDismiss = { showAudioEffectsSheet = false }
-            )
+            AudioEffectsSheet(audioSessionId = audioSessionId, viewModel = viewModel, onDismiss = { showAudioEffectsSheet = false })
         }
 
         if (showStopDialog) {
             AlertDialog(
                 onDismissRequest = { showStopDialog = false },
                 title = { Text("Stop Options", fontFamily = OutfitFontFamily, fontWeight = FontWeight.SemiBold) },
-                text = {
-                    Text(
-                        "Choose manual stop behavior.",
-                        fontFamily = OutfitFontFamily,
-                        color = TextSecondary
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        viewModel.setStopAfterCurrent(true)
-                        showStopDialog = false
-                    }) {
-                        Text("After This Song")
-                    }
-                },
+                text = { Text("Choose manual stop behavior.", fontFamily = OutfitFontFamily, color = TextSecondary) },
+                confirmButton = { TextButton(onClick = { viewModel.setStopAfterCurrent(true); showStopDialog = false }) { Text("After This Song") } },
                 dismissButton = {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = {
-                            viewModel.stopPlaybackNow(useFade = true)
-                            viewModel.setStopAfterCurrent(false)
-                            showStopDialog = false
-                        }) { Text("Stop Now") }
-                        TextButton(onClick = {
-                            viewModel.setStopAfterCurrent(false)
-                            showStopDialog = false
-                        }) { Text("Clear") }
+                        TextButton(onClick = { viewModel.stopPlaybackNow(useFade = true); viewModel.setStopAfterCurrent(false); showStopDialog = false }) { Text("Stop Now") }
+                        TextButton(onClick = { viewModel.setStopAfterCurrent(false); showStopDialog = false }) { Text("Clear") }
                     }
                 }
             )
@@ -836,18 +693,13 @@ fun PlayerScreen(
     }
 }
 
-
-
 private fun formatDurationFull(millis: Long): String {
     val totalSeconds = (millis / 1000).coerceAtLeast(0)
     val hours = totalSeconds / 3_600
     val minutes = (totalSeconds % 3_600) / 60
     val seconds = totalSeconds % 60
-    return if (hours > 0) {
-        String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
-    } else {
-        String.format(Locale.US, "%d:%02d", minutes, seconds)
-    }
+    return if (hours > 0) String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+    else String.format(Locale.US, "%d:%02d", minutes, seconds)
 }
 
 @Composable
@@ -885,7 +737,6 @@ fun PremiumProgressBar(
             val centerY = size.height / 2
             val trackWidth = size.width
 
-            // Track Background (Dark)
             drawRoundRect(
                 color = Color(0xFF333333),
                 topLeft = Offset(0f, centerY - barHeight / 2),
@@ -893,7 +744,6 @@ fun PremiumProgressBar(
                 cornerRadius = CornerRadius(barHeight / 2)
             )
 
-            // Active Track (Gradient)
             drawRoundRect(
                 brush = Brush.horizontalGradient(
                     colors = listOf(accentColor, Color(0xFFFFD54F))
@@ -903,42 +753,18 @@ fun PremiumProgressBar(
                 cornerRadius = CornerRadius(barHeight / 2)
             )
 
-            // A-B Loop Markers (Visible Lines)
             if (loopA != null) {
                 val aX = (loopA.toFloat() / totalDuration) * trackWidth
-                drawLine(
-                    color = Color.Cyan,
-                    start = Offset(aX, centerY - barHeight),
-                    end = Offset(aX, centerY + barHeight),
-                    strokeWidth = 4.dp.toPx(),
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round
-                )
+                drawLine(color = Color.Cyan, start = Offset(aX, centerY - barHeight), end = Offset(aX, centerY + barHeight), strokeWidth = 4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
             }
             if (loopB != null) {
                 val bX = (loopB.toFloat() / totalDuration) * trackWidth
-                drawLine(
-                    color = Color.Red,
-                    start = Offset(bX, centerY - barHeight),
-                    end = Offset(bX, centerY + barHeight),
-                    strokeWidth = 4.dp.toPx(),
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round
-                )
+                drawLine(color = Color.Red, start = Offset(bX, centerY - barHeight), end = Offset(bX, centerY + barHeight), strokeWidth = 4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
             }
 
-            // Thumb (Glow + Core)
             val thumbX = trackWidth * fraction
-            // Outer Glow
-            drawCircle(
-                color = accentColor.copy(alpha = 0.3f),
-                radius = 10.dp.toPx(),
-                center = Offset(thumbX, centerY)
-            )
-            // Solid Core
-            drawCircle(
-                color = Color.White,
-                radius = 5.dp.toPx(),
-                center = Offset(thumbX, centerY)
-            )
+            drawCircle(color = accentColor.copy(alpha = 0.3f), radius = 10.dp.toPx(), center = Offset(thumbX, centerY))
+            drawCircle(color = Color.White, radius = 5.dp.toPx(), center = Offset(thumbX, centerY))
         }
 
         Slider(

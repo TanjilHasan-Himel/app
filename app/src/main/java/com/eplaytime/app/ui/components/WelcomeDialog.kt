@@ -62,7 +62,7 @@ fun WelcomeDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Welcome to PlayTime",
+                    text = "Welcome to Audia Player",
                     style = MaterialTheme.typography.headlineSmall,
                     color = Color.White,
                     fontWeight = FontWeight.Bold

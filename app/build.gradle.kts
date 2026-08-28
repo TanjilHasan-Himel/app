@@ -1,3 +1,33 @@
+import java.util.Properties
+import java.io.FileInputStream
+import java.io.FileOutputStream
+
+val versionPropsFile = file("version.properties")
+val versionProps = Properties()
+if (versionPropsFile.exists()) {
+    versionProps.load(FileInputStream(versionPropsFile))
+} else {
+    versionProps["VERSION_CODE"] = "12"
+    versionProps["VERSION_NAME"] = "9.0.0"
+    versionProps.store(FileOutputStream(versionPropsFile), null)
+}
+
+val isBuilding = gradle.startParameter.taskNames.any { it.contains("assemble") || it.contains("bundle") }
+if (isBuilding) {
+    val currentName = versionProps["VERSION_NAME"].toString()
+    val parts = currentName.split(".")
+    if (parts.size == 3) {
+        val patch = parts[2].toIntOrNull() ?: 0
+        versionProps["VERSION_NAME"] = "${parts[0]}.${parts[1]}.${patch + 1}"
+    }
+    val currentCode = versionProps["VERSION_CODE"].toString().toIntOrNull() ?: 12
+    versionProps["VERSION_CODE"] = (currentCode + 1).toString()
+    versionProps.store(FileOutputStream(versionPropsFile), null)
+}
+
+val vCode = versionProps["VERSION_CODE"].toString().toInt()
+val vName = versionProps["VERSION_NAME"].toString()
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -17,8 +47,8 @@ android {
         applicationId = "com.eplaytime.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 12
-        versionName = "8.0.0"
+        versionCode = vCode
+        versionName = vName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -96,6 +126,9 @@ dependencies {
 
     // Coil (Image Loading)
     implementation("io.coil-kt:coil-compose:2.6.0")
+
+    // Drag and Drop (Reorderable)
+    implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
 
     // Google Fonts
     implementation("androidx.compose.ui:ui-text-google-fonts:1.6.8")

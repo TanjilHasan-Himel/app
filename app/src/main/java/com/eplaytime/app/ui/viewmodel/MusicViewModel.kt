@@ -379,7 +379,7 @@ class MusicViewModel @Inject constructor(
                             _repeatMode.value = controller.repeatMode
                             _playbackSpeed.value = controller.playbackParameters.speed
                             
-                            android.util.Log.d("MusicViewModel", "✓ Synced with running service: ${song.title}")
+                            android.util.Log.d("MusicViewModel", "âœ“ Synced with running service: ${song.title}")
                             
                             // Start progress updates if playing
                             if (controller.isPlaying) {
@@ -410,7 +410,7 @@ class MusicViewModel @Inject constructor(
                             _duration.value = controller.duration
                             _playbackSpeed.value = controller.playbackParameters.speed
                             
-                            android.util.Log.d("MusicViewModel", "⚠ Synced with FOREIGN audio (Alarm?): ${tempSong.title}")
+                            android.util.Log.d("MusicViewModel", "âš  Synced with FOREIGN audio (Alarm?): ${tempSong.title}")
                             
                             if (controller.isPlaying) startProgressUpdates()
                             playlistPrepared = true
@@ -491,7 +491,7 @@ class MusicViewModel @Inject constructor(
 
                     // Save to DataStore
                     viewModelScope.launch {
-                        dataStore.saveLastSong(uri)
+                        dataStore.saveLastSong(uri, _currentSong.value?.title ?: "Song")
                     }
                     markSongPlayed(uri)
                     refreshCurrentSongLoopPresets()
@@ -641,7 +641,7 @@ class MusicViewModel @Inject constructor(
                     val song = _songList.value.find { it.uri == state.lastSongUri }
                     if (song != null) {
                         _currentSong.value = song
-                        android.util.Log.d("MusicViewModel", "✓ Restored state: ${song.title} at ${state.lastPosition}ms")
+                        android.util.Log.d("MusicViewModel", "âœ“ Restored state: ${song.title} at ${state.lastPosition}ms")
                         
                         // Prepare but don't play
                         mediaController?.let { controller ->
@@ -662,7 +662,7 @@ class MusicViewModel @Inject constructor(
                             }
                         }
                     } else {
-                        android.util.Log.w("MusicViewModel", "❌ Could not restore song: ${state.lastSongUri} (Not found in ${_songList.value.size} songs)")
+                        android.util.Log.w("MusicViewModel", "âŒ Could not restore song: ${state.lastSongUri} (Not found in ${_songList.value.size} songs)")
                     }
                 }
             } catch (e: Exception) {
@@ -946,7 +946,7 @@ class MusicViewModel @Inject constructor(
                     delay(500L)
                     val nowSong = _currentSong.value?.uri
                     if (nowSong != startingSong) {
-                        // New song just started — pause immediately
+                        // New song just started â€” pause immediately
                         mediaController?.pause()
                         _stopAfterCurrentSong.value = false
                         break

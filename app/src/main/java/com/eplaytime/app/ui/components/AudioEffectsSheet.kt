@@ -61,9 +61,12 @@ fun AudioEffectsSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val bassStrength by viewModel.bassBoostStrength.collectAsState()
     val eqBandsRaw by viewModel.eqBandsLevels.collectAsState()
-    val bandCount = remember(audioSessionId) {
-        AudioEffectManager.getNumberOfBands().toInt().coerceAtLeast(0)
-    }
+    val isInitialized by AudioEffectManager.isInitialized.collectAsState()
+    
+    val bandCount = remember(isInitialized, audioSessionId) {
+        AudioEffectManager.getNumberOfBands().toInt()
+    }.coerceAtLeast(0)
+    
     val visibleBands = remember(bandCount) { minOf(5, bandCount) }
     val bandRange = AudioEffectManager.getBandLevelRange()
     val minEq = bandRange.getOrNull(0)?.toFloat() ?: -1500f

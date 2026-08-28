@@ -20,6 +20,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
  */
 data class PlaybackState(
     val lastSongUri: String = "",
+    val lastSongTitle: String = "",
     val lastPosition: Long = 0L,
     val lastPlaybackSpeed: Float = 1.0f,
     val shuffleEnabled: Boolean = false,
@@ -42,6 +43,7 @@ class PlayTimeDataStore @Inject constructor(
 ) {
     private object Keys {
         val LAST_SONG_URI = stringPreferencesKey("last_song_uri")
+        val LAST_SONG_TITLE = stringPreferencesKey("last_song_title")
         val LAST_POSITION = longPreferencesKey("last_position")
         val LAST_PLAYBACK_SPEED = floatPreferencesKey("last_playback_speed")
         val SHUFFLE_ENABLED = booleanPreferencesKey("shuffle_enabled")
@@ -60,6 +62,8 @@ class PlayTimeDataStore @Inject constructor(
         val RECENT_PLAYED_URIS = stringPreferencesKey("recent_played_uris")
         val PLAY_COUNTS = stringPreferencesKey("play_counts")
         val HAS_SEEN_ONBOARDING = booleanPreferencesKey("has_seen_onboarding")
+        val HAS_SHOWN_WELCOME = booleanPreferencesKey("has_shown_welcome")
+        val ENABLE_DAILY_REMINDERS = booleanPreferencesKey("enable_daily_reminders")
         val BASS_BOOST_STRENGTH = intPreferencesKey("bass_boost_strength")
         val EQ_BANDS_LEVELS = stringPreferencesKey("eq_bands_levels")
     }
@@ -138,6 +142,7 @@ class PlayTimeDataStore @Inject constructor(
         .map { prefs ->
             PlaybackState(
                 lastSongUri = prefs[Keys.LAST_SONG_URI] ?: "",
+                lastSongTitle = prefs[Keys.LAST_SONG_TITLE] ?: "",
                 lastPosition = prefs[Keys.LAST_POSITION] ?: 0L,
                 lastPlaybackSpeed = prefs[Keys.LAST_PLAYBACK_SPEED] ?: 1.0f,
                 shuffleEnabled = prefs[Keys.SHUFFLE_ENABLED] ?: false,
@@ -168,9 +173,10 @@ class PlayTimeDataStore @Inject constructor(
     /**
      * Save last song URI only
      */
-    suspend fun saveLastSong(songUri: String) {
+    suspend fun saveLastSong(songUri: String, title: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.LAST_SONG_URI] = songUri
+            prefs[Keys.LAST_SONG_TITLE] = title
         }
     }
 
@@ -264,12 +270,32 @@ class PlayTimeDataStore @Inject constructor(
         .catch { emit(emptyPreferences()) }
         .map { prefs -> prefs[Keys.HAS_SEEN_ONBOARDING] ?: false }
 
+    val hasShownWelcome: Flow<Boolean> = context.dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { prefs -> prefs[Keys.HAS_SHOWN_WELCOME] ?: false }
+
+    val enableDailyReminders: Flow<Boolean> = context.dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { prefs -> prefs[Keys.ENABLE_DAILY_REMINDERS] ?: true }
+
     /**
      * Save has seen onboarding
      */
     suspend fun setHasSeenOnboarding(seen: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[Keys.HAS_SEEN_ONBOARDING] = seen
+        }
+    }
+
+    suspend fun setHasShownWelcome(shown: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.HAS_SHOWN_WELCOME] = shown
+        }
+    }
+
+    suspend fun setEnableDailyReminders(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.ENABLE_DAILY_REMINDERS] = enabled
         }
     }
 

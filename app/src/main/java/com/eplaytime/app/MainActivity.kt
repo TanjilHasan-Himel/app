@@ -80,7 +80,7 @@ class MainActivity : ComponentActivity() {
     private fun scheduleEngagementWorker() {
         // Schedule worker to run periodically
         val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.eplaytime.app.worker.EngagementWorker>(
-            12, java.util.concurrent.TimeUnit.HOURS
+            2, java.util.concurrent.TimeUnit.HOURS
         ).build()
 
         androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
@@ -104,10 +104,43 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+fun sendWelcomeNotification(context: android.content.Context) {
+    val nm = context.getSystemService(android.app.NotificationManager::class.java)
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        val channel = android.app.NotificationChannel("playtime_welcome", "Welcome", android.app.NotificationManager.IMPORTANCE_DEFAULT)
+        nm.createNotificationChannel(channel)
+    }
+    val notification = androidx.core.app.NotificationCompat.Builder(context, "playtime_welcome")
+        .setSmallIcon(com.eplaytime.app.R.drawable.icon)
+        .setContentTitle("Welcome to Audia Player!")
+        .setContentText("Your music sounds better with us.")
+        .setAutoCancel(true)
+        .build()
+    nm.notify(1001, notification)
+}
+
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val dataStore = remember { com.eplaytime.app.data.datastore.PlayTimeDataStore(context) }
+    val hasShownWelcome by dataStore.hasShownWelcome.collectAsState(initial = true)
+
+    LaunchedEffect(hasShownWelcome) {
+        if (!hasShownWelcome) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                    sendWelcomeNotification(context)
+                    dataStore.setHasShownWelcome(true)
+                }
+            } else {
+                sendWelcomeNotification(context)
+                dataStore.setHasShownWelcome(true)
+            }
+        }
+    }
+
     var showSplash by remember { mutableStateOf(true) }
 
     if (showSplash) {

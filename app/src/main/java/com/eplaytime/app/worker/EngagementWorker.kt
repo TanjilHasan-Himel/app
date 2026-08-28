@@ -36,25 +36,46 @@ class EngagementWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result {
-        val lastOpened = dataStore.lastOpenedTime.first()
         val lastNotified = dataStore.lastNotificationTime.first()
+        val enableDailyReminders = dataStore.enableDailyReminders.first()
+        val lastOpened = dataStore.lastOpenedTime.first()
+        if (!enableDailyReminders) return Result.success()
         val userName = dataStore.userName.first() ?: "Friend"
+        val lastSongTitle = dataStore.playbackState.first().lastSongTitle
         
         val currentTime = System.currentTimeMillis()
-        val hoursSinceOpen = TimeUnit.MILLISECONDS.toHours(currentTime - lastOpened)
         val hoursSinceNotified = TimeUnit.MILLISECONDS.toHours(currentTime - lastNotified)
+        val hoursSinceOpened = TimeUnit.MILLISECONDS.toHours(currentTime - lastOpened)
 
-        // Don't spam: Ensure at least 12 hours since last notification
-        if (hoursSinceNotified < 12) {
+        // Don't spam: Ensure at least 4 hours since last notification
+        if (hoursSinceNotified < 4) {
             return Result.success()
         }
 
-        // Logic for message
-        val message = when {
-            hoursSinceOpen in 12..23 -> "Hey $userName, take a music break! 🎵"
-            hoursSinceOpen in 24..71 -> "Come back and continue your vibe on Audia. 🎧"
-            hoursSinceOpen >= 72 -> "We miss you, $userName! The music is waiting. 🥺"
-            else -> return Result.success() // Less than 12 hours inactive
+        // Only notify if app hasn't been opened in 24 hours, OR if there's a recent paused song (>3h)
+        val isRetention = hoursSinceOpened >= 24
+        val isResumeReminder = hoursSinceOpened in 3..23 && lastSongTitle.isNotEmpty()
+
+        if (!isRetention && !isResumeReminder) {
+            return Result.success()
+        }
+
+        val calendar = java.util.Calendar.getInstance()
+        val hourOfDay = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+
+        // Randomly decide whether to show a "resume song" message if a song is paused (1 in 3 chance)
+        val showResumeSong = isResumeReminder
+
+        val message = if (showResumeSong) {
+            "Want to finish listening to $lastSongTitle?"
+        } else {
+            when (hourOfDay) {
+                in 7..11 -> "Good morning, $userName! Start your day with some great vibes. Ã°Å¸Å’â€¦"
+                in 12..15 -> "Good afternoon! Time for a midday music break, $userName. Ã¢Ëœâ‚¬Ã¯Â¸Â"
+                in 16..18 -> "Evening is approaching! Unwind with your favorite tracks. Ã°Å¸Å’â€ "
+                in 19..23 -> "Good night, $userName. Relax with some soothing tunes. Ã°Å¸Å’â„¢"
+                else -> "Night owl, $userName? We've got the perfect late-night beats for you. Ã°Å¸Â¦â€°"
+            }
         }
 
         if (sendNotification(message)) {
@@ -87,7 +108,7 @@ class EngagementWorker @AssistedInject constructor(
         )
 
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.logo_icon)
+            .setSmallIcon(R.drawable.icon)
             .setContentTitle("Audia Player")
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))

@@ -32,11 +32,8 @@ import com.eplaytime.app.data.model.Song
 import com.eplaytime.app.ui.theme.*
 import com.eplaytime.app.ui.viewmodel.MusicViewModel
 import java.util.Locale
+import org.burnoutcrew.reorderable.*
 
-/**
- * QueueScreen - Shows current playback queue
- * Rich & Soft aesthetic with Outfit font
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QueueScreen(
@@ -91,14 +88,50 @@ fun QueueScreen(
                 )
             }
         } else {
+            val currentIndex = songList.indexOfFirst { it.id == currentSong?.id }
+            val upNext = if (currentIndex >= 0 && currentIndex < songList.size - 1) {
+                songList.subList(currentIndex + 1, songList.size)
+            } else {
+                songList
+            }
+
+            var upNextState by remember(upNext) { mutableStateOf(upNext) }
+            val offset = if (currentSong != null) 2 else 1
+            
+            val state = rememberReorderableLazyListState(onMove = { from, to ->
+                val mappedFrom = from.index - offset
+                val mappedTo = to.index - offset
+                
+                if (mappedFrom in upNextState.indices && mappedTo in upNextState.indices) {
+                    upNextState = upNextState.toMutableList().apply {
+                        add(mappedTo, removeAt(mappedFrom))
+                    }
+                }
+            }, canDragOver = { draggedOver, _ ->
+                draggedOver.key != "header" && draggedOver.key != "now_playing" && draggedOver.key != "footer"
+            }, onDragEnd = { startIndex, endIndex ->
+                val mappedFrom = startIndex - offset
+                val mappedTo = endIndex - offset
+                
+                if (mappedFrom in upNextState.indices && mappedTo in upNextState.indices) {
+                    val actualFrom = currentIndex + 1 + mappedFrom
+                    val actualTo = currentIndex + 1 + mappedTo
+                    if (actualFrom != actualTo) {
+                        viewModel.moveQueueItem(actualFrom, actualTo)
+                    }
+                }
+            })
+
             LazyColumn(
+                state = state.listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues),
+                    .padding(paddingValues)
+                    .reorderable(state),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item {
+                item(key = "header") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -114,9 +147,8 @@ fun QueueScreen(
                     }
                 }
 
-                // Now Playing Header
                 currentSong?.let { song ->
-                    item {
+                    item(key = "now_playing") {
                         Text(
                             text = "NOW PLAYING",
                             fontFamily = OutfitFontFamily,
@@ -144,44 +176,25 @@ fun QueueScreen(
                     }
                 }
 
-                // Queue items
-                val currentIndex = songList.indexOfFirst { it.id == currentSong?.id }
-                val upNext = if (currentIndex >= 0 && currentIndex < songList.size - 1) {
-                    songList.subList(currentIndex + 1, songList.size)
-                } else {
-                    songList
+                itemsIndexed(upNextState, key = { _, song -> song.id }) { index, song ->
+                    ReorderableItem(state, key = song.id) { isDragging ->
+                        val actualIndex = currentIndex + 1 + index
+                        val elevation = if (isDragging) 8.dp else 0.dp
+                        
+                        QueueItem(
+                            song = song,
+                            isCurrentlyPlaying = false,
+                            onRemove = { viewModel.removeFromQueue(actualIndex) },
+                            onPlayNext = { viewModel.playNextFromQueue(song.uri) },
+                            onPlayLater = { viewModel.playLaterFromQueue(song.uri) },
+                            onClick = { viewModel.playSong(song.uri) },
+                            modifier = Modifier
+                                .detectReorderAfterLongPress(state)
+                        )
+                    }
                 }
 
-                itemsIndexed(upNext, key = { _, song -> song.id }) { index, song ->
-                    // Calculate actual index in the full list
-                    // upNext is subList(currentIndex + 1, size)
-                    // So actual index = currentIndex + 1 + index
-                    val actualIndex = currentIndex + 1 + index
-                    
-                    QueueItem(
-                        song = song,
-                        isCurrentlyPlaying = false,
-                        onMoveUp = {
-                            if (actualIndex > currentIndex + 1) { // Can't move above "Now Playing" + 1
-                                viewModel.moveQueueItem(actualIndex, actualIndex - 1)
-                            }
-                        },
-                        onMoveDown = {
-                            if (actualIndex < songList.size - 1) {
-                                viewModel.moveQueueItem(actualIndex, actualIndex + 1)
-                            }
-                        },
-                        onRemove = {
-                            viewModel.removeFromQueue(actualIndex)
-                        },
-                        onPlayNext = { viewModel.playNextFromQueue(song.uri) },
-                        onPlayLater = { viewModel.playLaterFromQueue(song.uri) },
-                        onClick = { viewModel.playSong(song.uri) }
-                    )
-                }
-
-                // Bottom spacer for nav bar
-                item {
+                item(key = "footer") {
                     Spacer(modifier = Modifier.height(80.dp))
                 }
             }
@@ -193,15 +206,14 @@ fun QueueScreen(
 private fun QueueItem(
     song: Song,
     isCurrentlyPlaying: Boolean,
-    onMoveUp: (() -> Unit)? = null,
-    onMoveDown: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,
     onPlayLater: (() -> Unit)? = null,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(
@@ -217,8 +229,6 @@ private fun QueueItem(
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // ... (Image and Text - same as before) ...
-        // Album Art
         AsyncImage(
             model = song.albumArtUri ?: R.drawable.audia_player_logo,
             contentDescription = "Album Art",
@@ -231,7 +241,6 @@ private fun QueueItem(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Song Info
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = song.title,
@@ -253,8 +262,6 @@ private fun QueueItem(
             )
         }
 
-        // Duration (Hide if controls are present to save space, or keep it?)
-        // Let's keep it but maybe smaller padding
         Text(
             text = formatDuration(song.duration),
             fontFamily = OutfitFontFamily,
@@ -265,37 +272,13 @@ private fun QueueItem(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Reorder Controls (Only for Up Next items)
-        if (onMoveUp != null && onMoveDown != null && onRemove != null) {
+        if (onRemove != null && !isCurrentlyPlaying) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { onPlayNext?.invoke() }) {
                     Text("Next", fontFamily = OutfitFontFamily, fontSize = 10.sp, color = SoftGold)
                 }
                 TextButton(onClick = { onPlayLater?.invoke() }) {
                     Text("Later", fontFamily = OutfitFontFamily, fontSize = 10.sp, color = TextSecondary)
-                }
-                // Move Up
-                IconButton(
-                    onClick = onMoveUp,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowUp,
-                        contentDescription = "Move Up",
-                        tint = TextSecondary
-                    )
-                }
-                
-                // Move Down
-                IconButton(
-                    onClick = onMoveDown,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Move Down",
-                        tint = TextSecondary
-                    )
                 }
                 
                 // Delete
@@ -309,6 +292,14 @@ private fun QueueItem(
                         tint = TextSecondary
                     )
                 }
+                
+                // Drag Handle
+                Icon(
+                    imageVector = Icons.Default.DragHandle,
+                    contentDescription = "Drag to reorder",
+                    tint = TextSecondary,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
             }
         }
     }

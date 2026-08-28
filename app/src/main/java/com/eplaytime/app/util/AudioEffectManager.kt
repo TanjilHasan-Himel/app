@@ -3,7 +3,13 @@ package com.eplaytime.app.util
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 object AudioEffectManager {
+    private val _isInitialized = MutableStateFlow(false)
+    val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
     private var effectsEnabled: Boolean = true
@@ -19,6 +25,7 @@ object AudioEffectManager {
                 enabled = true
             }
             effectsEnabled = true
+            _isInitialized.value = true
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -45,6 +52,7 @@ object AudioEffectManager {
         }
         equalizer = null
         bassBoost = null
+        _isInitialized.value = false
     }
 
     fun setBassBoostStrength(strength: Short) {
