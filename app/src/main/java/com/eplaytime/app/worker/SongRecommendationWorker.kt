@@ -86,14 +86,14 @@ class SongRecommendationWorker @AssistedInject constructor(
 
         // Custom Layout for Notification? Standard BigText is fine.
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification_small)
+            .setSmallIcon(R.drawable.logo_icon)
             .setContentTitle("Audia Player")
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .setLargeIcon(android.graphics.BitmapFactory.decodeResource(applicationContext.resources, R.drawable.audia_player))
+            .setLargeIcon(android.graphics.BitmapFactory.decodeResource(applicationContext.resources, R.drawable.audia_player_logo))
             .setSubText("Music update")
 
         NotificationManagerCompat.from(applicationContext).notify(NOTIFICATION_ID, builder.build())

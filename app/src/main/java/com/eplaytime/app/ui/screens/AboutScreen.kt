@@ -96,7 +96,7 @@ fun AboutScreen(
         ) {
             // App Logo
             AsyncImage(
-                model = R.drawable.audia_player,
+                model = R.drawable.audia_player_logo,
                 contentDescription = "Audia Player Logo",
                 modifier = Modifier.size(120.dp)
             )

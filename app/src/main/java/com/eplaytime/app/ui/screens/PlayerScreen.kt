@@ -167,12 +167,12 @@ fun PlayerScreen(
                     ImageRequest.Builder(context)
                         .data(artUri)
                         .crossfade(true)
-                        .placeholder(R.drawable.audia_player)
-                        .error(R.drawable.audia_player)
-                        .fallback(R.drawable.audia_player)
+                        .placeholder(R.drawable.audia_player_logo)
+                        .error(R.drawable.audia_player_logo)
+                        .fallback(R.drawable.audia_player_logo)
                         .build()
                 } else {
-                    R.drawable.audia_player
+                    R.drawable.audia_player_logo
                 }
             }
 
@@ -186,7 +186,7 @@ fun PlayerScreen(
                 contentScale = ContentScale.Crop,
                 loading = {
                     Image(
-                        painter = painterResource(R.drawable.logo),
+                        painter = painterResource(R.drawable.audia_player_logo),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
@@ -195,7 +195,7 @@ fun PlayerScreen(
                 },
                 error = {
                     Image(
-                        painter = painterResource(R.drawable.logo),
+                        painter = painterResource(R.drawable.audia_player_logo),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
@@ -320,7 +320,7 @@ fun PlayerScreen(
                         contentScale = ContentScale.Crop,
                         loading = {
                             Image(
-                                painter = painterResource(R.drawable.audia_player),
+                                painter = painterResource(R.drawable.audia_player_logo),
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
@@ -328,7 +328,7 @@ fun PlayerScreen(
                         },
                         error = {
                             Image(
-                                painter = painterResource(R.drawable.audia_player),
+                                painter = painterResource(R.drawable.audia_player_logo),
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop

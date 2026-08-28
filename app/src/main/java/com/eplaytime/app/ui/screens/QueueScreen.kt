@@ -220,7 +220,7 @@ private fun QueueItem(
         // ... (Image and Text - same as before) ...
         // Album Art
         AsyncImage(
-            model = song.albumArtUri ?: R.drawable.logo,
+            model = song.albumArtUri ?: R.drawable.audia_player_logo,
             contentDescription = "Album Art",
             modifier = Modifier
                 .size(48.dp)

@@ -169,7 +169,7 @@ private fun WelcomeNameStep(name: String, onNameChange: (String) -> Unit) {
         verticalArrangement = Arrangement.Center
     ) {
         Image(
-            painter = painterResource(id = R.drawable.audia_player),
+            painter = painterResource(id = R.drawable.audia_player_logo),
             contentDescription = null,
             modifier = Modifier
                 .size(92.dp)
@@ -360,7 +360,7 @@ private fun PermissionsStep(name: String, onComplete: (String) -> Unit) {
         verticalArrangement = Arrangement.Center
     ) {
         Image(
-            painter = painterResource(id = R.drawable.audia_player),
+            painter = painterResource(id = R.drawable.audia_player_logo),
             contentDescription = null,
             modifier = Modifier
                 .size(88.dp)

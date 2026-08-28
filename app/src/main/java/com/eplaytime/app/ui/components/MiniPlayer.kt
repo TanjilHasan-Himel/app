@@ -219,7 +219,7 @@ private fun SpinningAlbumArt(
     )
 
     AsyncImage(
-        model = albumArtUri ?: R.drawable.logo,
+        model = albumArtUri ?: R.drawable.audia_player_logo,
         contentDescription = "Album Art",
         modifier = Modifier
             .size(48.dp)

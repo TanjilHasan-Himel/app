@@ -1073,7 +1073,7 @@ private fun GlassHeader(
                         .clickable { onAboutClick() }
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.audia_player),
+                        painter = painterResource(id = R.drawable.audia_player_logo),
                         contentDescription = "Logo",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
@@ -1256,7 +1256,7 @@ private fun AlbumList(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AsyncImage(
-                    model = album.albumArtUri ?: R.drawable.logo,
+                    model = album.albumArtUri ?: R.drawable.audia_player_logo,
                     contentDescription = null,
                     modifier = Modifier
                         .size(56.dp)

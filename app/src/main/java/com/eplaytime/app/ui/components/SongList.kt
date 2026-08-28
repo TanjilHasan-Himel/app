@@ -190,7 +190,7 @@ fun SongListItem(
         // Round Album Art
         AsyncImage(
             model = ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
-                .data(song.albumArtUri ?: R.drawable.logo)
+                .data(song.albumArtUri ?: R.drawable.audia_player_logo)
                 .size(128, 128) // CRITICAL: Downsample
                 .crossfade(true)
                 .diskCachePolicy(CachePolicy.ENABLED)

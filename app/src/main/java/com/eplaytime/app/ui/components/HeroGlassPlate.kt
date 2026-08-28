@@ -132,7 +132,7 @@ fun HeroGlassPlate(
                     .background(Color.White.copy(alpha = 0.05f)) // Glassy container
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.audia_player),
+                    painter = painterResource(id = R.drawable.audia_player_logo),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()

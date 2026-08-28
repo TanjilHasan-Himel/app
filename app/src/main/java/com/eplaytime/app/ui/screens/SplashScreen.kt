@@ -94,7 +94,7 @@ fun SplashScreen(
             // Logo with scale and pulse
             // Logo with scale and pulse
             Image(
-                painter = painterResource(id = R.drawable.audia_player),
+                painter = painterResource(id = R.drawable.audia_player_logo),
                 contentDescription = "Audia Player Logo",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
