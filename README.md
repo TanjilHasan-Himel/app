@@ -42,51 +42,44 @@ Whether you're listening to high-resolution FLAC audio, following along with mil
 
 ---
 
-## 🎬 Live Demo & Visual Showcase
+## 📱 Visual Showcase
 
 <div align="center">
   <table>
     <tr>
-      <td align="center" width="50%">
-        <strong>📱 Interactive Live Demo</strong><br><br>
-        <img src="assets/demo.gif" alt="Audia Live Demo" width="280">
-      </td>
-      <td align="center" width="50%">
+      <td align="center" width="25%">
         <strong>🎨 Now Playing & Stage</strong><br><br>
-        <img src="assets/screenshots/player_screen.png" alt="Player Screen" width="280">
+        <img src="assets/screenshots/player_screen.png" alt="Player Screen" width="220">
       </td>
-    </tr>
-  </table>
-</div>
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center" width="33%">
+      <td align="center" width="25%">
         <strong>📜 Real-Time Synced Lyrics</strong><br><br>
-        <img src="assets/screenshots/lyrics_screen.png" alt="Lyrics Mode" width="230">
+        <img src="assets/screenshots/lyrics_screen.png" alt="Lyrics Mode" width="220">
       </td>
-      <td align="center" width="33%">
+      <td align="center" width="25%">
         <strong>📀 Home & Turntable Feed</strong><br><br>
-        <img src="assets/screenshots/home_screen.png" alt="Home Screen" width="230">
+        <img src="assets/screenshots/home_screen.png" alt="Home Screen" width="220">
       </td>
-      <td align="center" width="33%">
+      <td align="center" width="25%">
         <strong>🔁 Precision A-B Looper</strong><br><br>
-        <img src="assets/screenshots/loop_presets.png" alt="A-B Loop Presets" width="230">
+        <img src="assets/screenshots/loop_presets.png" alt="A-B Loop Presets" width="220">
       </td>
     </tr>
     <tr>
-      <td align="center" width="33%">
+      <td align="center" width="25%">
         <strong>🛠️ Song Garage & Inspector</strong><br><br>
-        <img src="assets/screenshots/song_garage.png" alt="Song Garage" width="230">
+        <img src="assets/screenshots/song_garage.png" alt="Song Garage" width="220">
       </td>
-      <td align="center" width="33%">
+      <td align="center" width="25%">
         <strong>🌙 Zen Bedtime Mode</strong><br><br>
-        <img src="assets/screenshots/zen_mode.png" alt="Zen Bedtime Mode" width="230">
+        <img src="assets/screenshots/zen_mode.png" alt="Zen Bedtime Mode" width="220">
       </td>
-      <td align="center" width="33%">
+      <td align="center" width="25%">
+        <strong>📋 Live Queue & Reorder</strong><br><br>
+        <img src="assets/screenshots/queue_screen.png" alt="Queue Management" width="220">
+      </td>
+      <td align="center" width="25%">
         <strong>🔍 Instant Library Search</strong><br><br>
-        <img src="assets/screenshots/search_screen.png" alt="Search & Filtering" width="230">
+        <img src="assets/screenshots/search_screen.png" alt="Search & Filtering" width="220">
       </td>
     </tr>
   </table>
