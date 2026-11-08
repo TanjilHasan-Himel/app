@@ -22,7 +22,7 @@
 
 > [!IMPORTANT]
 > **Product Showcase & Official Release Hub**  
-> This public repository serves exclusively as the official product presentation, release distribution hub, and issue tracker for **Audia Player**. The underlying Android application is a **closed-source, proprietary product**. The source code is maintained in a private repository and is not distributed here.
+> This public repository serves exclusively as the official product presentation, release distribution hub, and issue tracker for **Audia Player**. The underlying Android application is a **closed-source, proprietary product**. The source code is maintained in a private repository and is not distributed here. See the [Legal Disclaimer & Terms of Use](LEGAL.md) for details.
 
 ---
 
@@ -94,6 +94,21 @@ Whether you're listening to high-resolution FLAC audio, following along with mil
 
 ---
 
+## 🏆 Why Audia? (Feature Comparison)
+
+| Dimension | Audia Player 🎵 | Standard Offline Players 📻 | Cloud Streaming Apps ☁️ |
+| :--- | :---: | :---: | :---: |
+| **Privacy & Telemetry** | **100% Offline (Zero Tracking)** | Offline only | Cloud Tracking & User Profiling |
+| **Advertisements** | **Zero Ads Forever** | Banner Ads / In-App Purchases | Subscriptions / Audio Interruptions |
+| **Synced Lyrics** | **Millisecond Accurate (LRCLIB)** | None or Manual `.lrc` | Paywalled / Network Dependent |
+| **Musician A-B Looper** | **Built-in with Named Presets** | Rare / None | Unavailable |
+| **Acoustic Specs Inspector** | **Built-in Song Garage** | Basic ID3 Tag only | Hidden / Transcoded Audio |
+| **Audio Engine** | **AndroidX Media3 (ExoPlayer)** | Legacy `MediaPlayer` | Proprietary Closed DRM |
+| **Memory Footprint** | **Ultra-Lightweight (~3.25 MB)** | 25 MB – 80 MB | 120 MB+ |
+| **Lock Screen Controls** | **Android 11–15 Media3 Session** | Partial or Glitchy | Standard |
+
+---
+
 ## ✨ Key Features & Capabilities
 
 ### 🎨 Adaptive Fluid Stage & Reactive Bloom
@@ -125,10 +140,29 @@ Whether you're listening to high-resolution FLAC audio, following along with mil
 - **Zen Ambient Screen:** Distraction-free night listening mode with dim visualizer.
 - **Smart Sleep Timer:** Gentle volume fade-out with optional "Stop playback after current song" toggle.
 
-### 🔒 100% Offline-First & Privacy Centric
-- **Zero Tracking:** No analytics libraries, crash-reporting SDKs, or background telemetry.
-- **Zero Ads:** Completely ad-free interface.
-- **Ultra Lightweight:** Optimized release build at just **3.25 MB**.
+---
+
+## 🎧 Supported Audiophile Audio Formats
+
+Audia utilizes native 32-bit floating point audio decoding via AndroidX Media3:
+
+- **Lossless Hi-Res Audio:** `FLAC` (up to 24-bit / 192 kHz), `ALAC`, `WAV`, `AIFF`
+- **Compressed & Lossy:** `MP3` (up to 320 kbps CBR/VBR), `AAC` (`.m4a`), `OGG Vorbis`, `OPUS`
+- **Multi-channel & High Bitrate:** Native gapless playback with dynamic replay gain calculation.
+
+---
+
+## 🕹️ Gestures & Interaction Shortcuts
+
+| Action | Gesture | Description |
+| :--- | :--- | :--- |
+| **Seek ±5s** | **Double-Tap Margin** | Double-tap left margin for `-5s`, right margin for `+5s` with floating ripple badge |
+| **Continuous Seek** | **Rapid Taps** | Rapid subsequent taps accumulate seek (`±10s`, `±15s`, `±20s`) |
+| **Toggle Lyrics Mode** | **Tap Lyrics / Art** | Single tap on the lyric line or artwork opens full-screen lyrics mode |
+| **Custom Artwork** | **Long-Press Artwork** | Opens gallery image picker to set custom high-res album cover |
+| **Loop Presets** | **Long-Press A-B** | Opens bottom sheet displaying all saved loop sections with 1-tap playback |
+| **Song Details** | **Tap Title / Artist** | Opens Song Wiki modal with artist biography and song metadata |
+| **Zen Bedtime Mode** | **Tap Header Moon (🌙)** | Activates minimal night mode with dimmed display |
 
 ---
 
@@ -185,21 +219,22 @@ Audia is distributed as an optimized, signed Android Application Package (`.apk`
 
 ---
 
+## ⚖️ Legal Disclaimer & Terms of Use
+
+Please read the complete [Legal Disclaimer & Terms of Use (LEGAL.md)](LEGAL.md) before installing or using Audia Player.
+
+- **Proprietary Software Notice:** Audia Player (including its compiled APK, user interface designs, custom graphics, brand assets, and underlying code) is a **closed-source, proprietary application** owned exclusively by **Tanjil Hasan Himel**. All rights reserved.
+- **Repository License Scope:** The [MIT License](LICENSE) in this repository applies strictly to the documentation, guides, and showcase assets hosted in this repository. It **does NOT apply** to the application binary or source code.
+- **Content Disclaimer:** Audia Player is an offline audio visualizer and playback tool. It does not host, stream, or distribute copyrighted music. Users are solely responsible for audio files stored on their devices.
+- **Third-Party Trademarks:** All artist names, album titles, and album covers shown in screenshots are property of their respective copyright holders and used solely for illustrative purposes.
+
+---
+
 ## 💬 Community & Feedback
 
 Found a bug or have an idea for a new feature?
 - Submit a detailed report via [GitHub Issues](https://github.com/TanjilHasan-Himel/app/issues).
 - Start a conversation in [GitHub Discussions](https://github.com/TanjilHasan-Himel/app/discussions).
-
----
-
-## 📄 License & Terms
-
-- **Repository License:** The documentation, screenshots, and presentation assets in this repository are licensed under the **[MIT License](LICENSE)**.
-- **Application License:** The **Audia Player** Android application and binary are proprietary freeware (Closed Source). All rights reserved.
-
-> [!NOTE]
-> The MIT License applies exclusively to the showcase assets and documentation in this repository. It does not grant rights to the underlying application source code or trademark.
 
 ---
 
