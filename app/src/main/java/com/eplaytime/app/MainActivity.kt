@@ -12,6 +12,11 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.zIndex
+import com.eplaytime.app.ui.components.InAppNotificationCapsule
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
@@ -111,7 +116,7 @@ fun sendWelcomeNotification(context: android.content.Context) {
         nm.createNotificationChannel(channel)
     }
     val notification = androidx.core.app.NotificationCompat.Builder(context, "playtime_welcome")
-        .setSmallIcon(com.eplaytime.app.R.drawable.icon)
+        .setSmallIcon(com.eplaytime.app.R.drawable.ic_audia_notification)
         .setContentTitle("Welcome to Audia Player!")
         .setContentText("Your music sounds better with us.")
         .setAutoCancel(true)
@@ -155,105 +160,86 @@ fun MainScreen(
 @Composable
 private fun MainNavigation() {
     val navController = rememberNavController()
-    var isViewModelReady by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        // Keep first frame lightweight on cold start/reboot before loading heavy media state.
-        delay(250)
-        isViewModelReady = true
-    }
-
-    if (!isViewModelReady) {
-        Scaffold(modifier = Modifier.fillMaxSize()) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(BlackBackground)
-                    .padding(paddingValues),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                CircularProgressIndicator(
-                    color = SoftGold,
-                    strokeWidth = 3.dp,
-                    modifier = Modifier.clip(CircleShape)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Loading your music...",
-                    color = Color.White,
-                    fontFamily = OutfitFontFamily
-                )
-            }
-        }
-        return
-    }
-
     val sharedViewModel: MusicViewModel = hiltViewModel()
+    val inAppNotification by sharedViewModel.inAppNotification.collectAsState()
 
     LaunchedEffect(Unit) {
         sharedViewModel.updateLastOpenedTime()
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = "home"
-    ) {
-        composable("home") {
-            HomeScreen(
-                viewModel = sharedViewModel,
-                onNavigateToScheduler = { navController.navigate("scheduler") },
-                onNavigateToPlayer = { navController.navigate("player") },
-                onNavigateToAbout = { navController.navigate("about") },
-                onNavigateToQueue = { navController.navigate("queue") },
-                onNavigateToFolder = { path -> 
-                    val encodedPath = Uri.encode(path)
-                    navController.navigate("folders?path=$encodedPath") 
-                }
-            )
+    Box(modifier = Modifier.fillMaxSize()) {
+        NavHost(
+            navController = navController,
+            startDestination = "home"
+        ) {
+            composable("home") {
+                HomeScreen(
+                    viewModel = sharedViewModel,
+                    onNavigateToScheduler = { navController.navigate("scheduler") },
+                    onNavigateToPlayer = { navController.navigate("player") },
+                    onNavigateToAbout = { navController.navigate("about") },
+                    onNavigateToQueue = { navController.navigate("queue") },
+                    onNavigateToFolder = { path -> 
+                        val encodedPath = Uri.encode(path)
+                        navController.navigate("folders?path=$encodedPath") 
+                    }
+                )
+            }
+
+            composable("scheduler") {
+                com.eplaytime.app.ui.screens.SchedulerScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    musicViewModel = sharedViewModel
+                )
+            }
+
+            composable("player") {
+                com.eplaytime.app.ui.screens.PlayerScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToQueue = { navController.navigate("queue") },
+                    viewModel = sharedViewModel
+                )
+            }
+
+            composable("folders?path={path}", 
+                arguments = listOf(androidx.navigation.navArgument("path") { 
+                    nullable = true 
+                    defaultValue = null 
+                    type = androidx.navigation.NavType.StringType
+                })
+            ) { backStackEntry ->
+                val path = backStackEntry.arguments?.getString("path")
+                com.eplaytime.app.ui.screens.FolderScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    viewModel = sharedViewModel,
+                    initialFolderPath = path
+                )
+            }
+
+            composable("about") {
+                com.eplaytime.app.ui.screens.AboutScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("queue") {
+                com.eplaytime.app.ui.screens.QueueScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    viewModel = sharedViewModel
+                )
+            }
         }
 
-        composable("scheduler") {
-            com.eplaytime.app.ui.screens.SchedulerScreen(
-                onNavigateBack = { navController.popBackStack() },
-                musicViewModel = sharedViewModel
-            )
-        }
-
-        composable("player") {
-            com.eplaytime.app.ui.screens.PlayerScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToQueue = { navController.navigate("queue") },
-                viewModel = sharedViewModel
-            )
-        }
-
-        composable("folders?path={path}", 
-            arguments = listOf(androidx.navigation.navArgument("path") { 
-                nullable = true 
-                defaultValue = null 
-                type = androidx.navigation.NavType.StringType
-            })
-        ) { backStackEntry ->
-            val path = backStackEntry.arguments?.getString("path")
-            com.eplaytime.app.ui.screens.FolderScreen(
-                onNavigateBack = { navController.popBackStack() },
-                viewModel = sharedViewModel,
-                initialFolderPath = path
-            )
-        }
-
-        composable("about") {
-            com.eplaytime.app.ui.screens.AboutScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-
-        composable("queue") {
-            com.eplaytime.app.ui.screens.QueueScreen(
-                onNavigateBack = { navController.popBackStack() },
-                viewModel = sharedViewModel
-            )
-        }
+        // Global In-App Notification Capsule (Apple Dynamic Island / Luxury Floating HUD)
+        InAppNotificationCapsule(
+            message = inAppNotification,
+            onDismiss = { sharedViewModel.dismissInAppNotification() },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(horizontal = 24.dp)
+                .padding(top = 10.dp)
+                .zIndex(9999f)
+        )
     }
 }

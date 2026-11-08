@@ -32,10 +32,12 @@ class MusicService : MediaLibraryService() {
 
     companion object {
         const val ACTION_PLAY_ALARM = "com.eplaytime.app.action.PLAY_ALARM"
+        const val ACTION_STOP_ALARM = "com.eplaytime.app.action.STOP_ALARM"
         const val EXTRA_SONG_URI = "extra_song_uri"
         const val EXTRA_ALARM_ID = "extra_alarm_id"
         const val EXTRA_TARGET_VOLUME = "extra_target_volume"
         const val EXTRA_ALARM_SINGLE_SHOT = "extra_alarm_single_shot"
+        const val NOTIFICATION_ID_ALARM = 12345
         private const val TAG = "MusicService"
     }
 
@@ -48,6 +50,16 @@ class MusicService : MediaLibraryService() {
     private var fadeCoroutine: kotlinx.coroutines.Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_ALARM) {
+            Log.d(TAG, "Stop alarm action received, terminating scheduled playback")
+            isAlarmSingleShotMode = false
+            fadeCoroutine?.cancel()
+            player?.stop()
+            player?.clearMediaItems()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_PLAY_ALARM) {
             val uriString = intent.getStringExtra(EXTRA_SONG_URI)
             val volume = intent.getFloatExtra(EXTRA_TARGET_VOLUME, 1.0f)
@@ -77,24 +89,38 @@ class MusicService : MediaLibraryService() {
                     Log.e(TAG, "Could not override system volume (might lack permission)", e)
                 }
 
+
+                val songTitle = intent.getStringExtra("extra_song_title") ?: "Alarm Playback"
+                val stopIntent = Intent(this, MusicService::class.java).apply {
+                    action = ACTION_STOP_ALARM
+                }
+                val stopPendingIntent = android.app.PendingIntent.getService(
+                    this,
+                    1,
+                    stopIntent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+
                 // Start absolute FGS immediately to prevent Android 12+ 10-second timeout FGS crash
                 try {
                     val nm = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        val channel = android.app.NotificationChannel("playtime_al", "Audia Player Scheduler", android.app.NotificationManager.IMPORTANCE_LOW)
+                        val channel = android.app.NotificationChannel("playtime_al", "Audia Player Scheduler", android.app.NotificationManager.IMPORTANCE_HIGH)
                         nm.createNotificationChannel(channel)
                     }
                     val notification = androidx.core.app.NotificationCompat.Builder(this, "playtime_al")
-                        .setSmallIcon(android.R.drawable.ic_media_play)
-                        .setContentTitle("Scheduled Playback")
-                        .setContentText("Starting...")
+                        .setSmallIcon(R.drawable.ic_audia_notification)
+                        .setContentTitle(songTitle)
+                        .setContentText("Playing scheduled alarm")
+                        .setOngoing(true)
+                        .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Alarm", stopPendingIntent)
                         .build()
-                    startForeground(12345, notification)
+                    startForeground(NOTIFICATION_ID_ALARM, notification)
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to startForeground", e)
                 }
 
-                val songTitle = intent.getStringExtra("extra_song_title") ?: "Alarm Playback"
+
                 val metadata = androidx.media3.common.MediaMetadata.Builder()
                     .setTitle(songTitle)
                     .setArtist("Audia Player Scheduler")
@@ -152,7 +178,9 @@ class MusicService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
-            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon().build()
+            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                .add(SessionCommand("ACTION_GET_AUDIO_SESSION_ID", Bundle.EMPTY))
+                .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)
                 .build()
@@ -198,8 +226,18 @@ class MusicService : MediaLibraryService() {
             return try {
                 val action = command.customAction
                 if (action == "ACTION_GET_AUDIO_SESSION_ID") {
+                    val sessionId = player?.audioSessionId?.takeIf { it != C.AUDIO_SESSION_ID_UNSET && it > 0 }
+                        ?: AudioEffectManager.activeSessionId.value
+                    if (sessionId > 0) {
+                        AudioEffectManager.initialize(sessionId)
+                        val extras = Bundle().apply {
+                            putInt("AUDIO_SESSION_ID", sessionId)
+                        }
+                        session.setSessionExtras(extras)
+                    }
                     val extras = Bundle()
-                    extras.putInt("AUDIO_SESSION_ID", player?.audioSessionId ?: 0)
+                    extras.putInt("AUDIO_SESSION_ID", sessionId)
+                    Log.d(TAG, "Responding to ACTION_GET_AUDIO_SESSION_ID with session: $sessionId")
                     Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, extras))
                 } else {
                     Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
@@ -221,6 +259,7 @@ class MusicService : MediaLibraryService() {
                     player?.seekTo(0L)
                     isAlarmSingleShotMode = false
                     Log.d(TAG, "Alarm single-shot completed, stopping service")
+                    stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 }
             }
@@ -239,6 +278,18 @@ class MusicService : MediaLibraryService() {
             .setWakeMode(C.WAKE_MODE_LOCAL) // Keep CPU awake
             .build()
 
+        val audioManager = getSystemService(AUDIO_SERVICE) as? android.media.AudioManager
+        val generatedSessionId = audioManager?.generateAudioSessionId() ?: C.AUDIO_SESSION_ID_UNSET
+        if (generatedSessionId > 0 && generatedSessionId != C.AUDIO_SESSION_ID_UNSET) {
+            try {
+                player?.setAudioSessionId(generatedSessionId)
+                AudioEffectManager.initialize(generatedSessionId)
+                Log.d(TAG, "Assigned proactive audioSessionId: $generatedSessionId to ExoPlayer")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed setting audioSessionId on ExoPlayer", e)
+            }
+        }
+
         // Intent to open app when clicking notification
         val pendingIntent = android.app.PendingIntent.getActivity(
             this,
@@ -247,16 +298,61 @@ class MusicService : MediaLibraryService() {
             android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val sessionExtras = Bundle().apply {
+            val sid = player?.audioSessionId?.takeIf { it != C.AUDIO_SESSION_ID_UNSET && it > 0 }
+                ?: AudioEffectManager.activeSessionId.value
+            putInt("AUDIO_SESSION_ID", sid)
+        }
+
         mediaSession = MediaLibrarySession.Builder(this, player!!, sessionCallback)
             .setId("MusicService")
             .setSessionActivity(pendingIntent!!)
+            .setExtras(sessionExtras)
             .build()
+
+        // Ensure Notification Channel for Media Playback has VISIBILITY_PUBLIC for Android 11/12 Lock Screen
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val nm = getSystemService(android.app.NotificationManager::class.java)
+            val channel = android.app.NotificationChannel(
+                "default_channel_id",
+                "Music Playback",
+                android.app.NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Playback controls and lock screen media controls"
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                setShowBadge(false)
+            }
+            nm?.createNotificationChannel(channel)
+        }
+
+        try {
+            val notificationProvider = androidx.media3.session.DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId("default_channel_id")
+                .setChannelName(R.string.app_name)
+                .build()
+            notificationProvider.setSmallIcon(R.drawable.ic_audia_notification)
+            setMediaNotificationProvider(notificationProvider)
+            Log.d(TAG, "Custom DefaultMediaNotificationProvider configured with ic_audia_notification & lockscreen visibility")
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not set custom MediaNotificationProvider: ${e.message}")
+        }
             
         player?.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                AudioEffectManager.initialize(audioSessionId)
+                if (audioSessionId != 0 && audioSessionId != C.AUDIO_SESSION_ID_UNSET) {
+                    AudioEffectManager.initialize(audioSessionId)
+                    val extras = Bundle().apply {
+                        putInt("AUDIO_SESSION_ID", audioSessionId)
+                    }
+                    mediaSession?.setSessionExtras(extras)
+                    Log.d(TAG, "ExoPlayer onAudioSessionIdChanged: $audioSessionId")
+                }
             }
         })
+        val initialSessionId = player?.audioSessionId ?: 0
+        if (initialSessionId != 0 && initialSessionId != C.AUDIO_SESSION_ID_UNSET) {
+            AudioEffectManager.initialize(initialSessionId)
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {

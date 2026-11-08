@@ -53,6 +53,11 @@ class PlayTimeDataStore @Inject constructor(
         val ACCENT_COLOR = stringPreferencesKey("accent_color")
         val FILTER_SHORT_AUDIO = booleanPreferencesKey("filter_short_audio") // Hide clips < 30s
         val FILTER_CALL_RECORDINGS = booleanPreferencesKey("filter_call_recordings") // Hide call/voice recordings
+        val MIN_SONG_DURATION_SEC = intPreferencesKey("min_song_duration_sec") // e.g. 0, 15, 30, 45, 60
+        val FOLDER_FILTER_MODE = stringPreferencesKey("folder_filter_mode") // "EXCLUDE" or "INCLUDE"
+        val FILTERED_FOLDERS = stringSetPreferencesKey("filtered_folders")
+        val LAST_SCAN_FOUND_COUNT = intPreferencesKey("last_scan_found_count")
+        val LAST_SCAN_EXCLUDED_COUNT = intPreferencesKey("last_scan_excluded_count")
         val USER_NAME = stringPreferencesKey("user_name")
         val LAST_OPENED_TIME = longPreferencesKey("last_opened_time")
         val LAST_NOTIFICATION_TIME = longPreferencesKey("last_notification_time")
@@ -65,6 +70,7 @@ class PlayTimeDataStore @Inject constructor(
         val HAS_SHOWN_WELCOME = booleanPreferencesKey("has_shown_welcome")
         val ENABLE_DAILY_REMINDERS = booleanPreferencesKey("enable_daily_reminders")
         val BASS_BOOST_STRENGTH = intPreferencesKey("bass_boost_strength")
+        val VIRTUALIZER_STRENGTH = intPreferencesKey("virtualizer_strength")
         val EQ_BANDS_LEVELS = stringPreferencesKey("eq_bands_levels")
     }
 
@@ -248,6 +254,73 @@ class PlayTimeDataStore @Inject constructor(
     }
 
     /**
+     * Minimum song duration in seconds (Echo Music scan filter)
+     */
+    val minSongDurationSec: Flow<Int> = context.dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { prefs -> prefs[Keys.MIN_SONG_DURATION_SEC] ?: 30 }
+
+    suspend fun setMinSongDurationSec(sec: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.MIN_SONG_DURATION_SEC] = sec
+        }
+    }
+
+    /**
+     * Folder filter mode: "EXCLUDE" or "INCLUDE"
+     */
+    val folderFilterMode: Flow<String> = context.dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { prefs -> prefs[Keys.FOLDER_FILTER_MODE] ?: "EXCLUDE" }
+
+    suspend fun setFolderFilterMode(mode: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.FOLDER_FILTER_MODE] = mode
+        }
+    }
+
+    /**
+     * Filtered folder paths (Set of strings)
+     */
+    val filteredFolders: Flow<Set<String>> = context.dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { prefs -> prefs[Keys.FILTERED_FOLDERS] ?: emptySet() }
+
+    suspend fun addFilteredFolder(path: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.FILTERED_FOLDERS]?.toMutableSet() ?: mutableSetOf()
+            current.add(path)
+            prefs[Keys.FILTERED_FOLDERS] = current
+        }
+    }
+
+    suspend fun removeFilteredFolder(path: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.FILTERED_FOLDERS]?.toMutableSet() ?: mutableSetOf()
+            current.remove(path)
+            prefs[Keys.FILTERED_FOLDERS] = current
+        }
+    }
+
+    /**
+     * Last scan summary statistics
+     */
+    val lastScanFoundCount: Flow<Int> = context.dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { prefs -> prefs[Keys.LAST_SCAN_FOUND_COUNT] ?: 0 }
+
+    val lastScanExcludedCount: Flow<Int> = context.dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { prefs -> prefs[Keys.LAST_SCAN_EXCLUDED_COUNT] ?: 0 }
+
+    suspend fun saveLastScanCounts(found: Int, excluded: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LAST_SCAN_FOUND_COUNT] = found
+            prefs[Keys.LAST_SCAN_EXCLUDED_COUNT] = excluded
+        }
+    }
+
+    /**
      * Get user name
      */
     val userName: Flow<String?> = context.dataStore.data
@@ -425,6 +498,16 @@ class PlayTimeDataStore @Inject constructor(
     suspend fun setBassBoostStrength(strength: Int) {
         context.dataStore.edit { prefs ->
             prefs[Keys.BASS_BOOST_STRENGTH] = strength
+        }
+    }
+
+    val virtualizerStrength: Flow<Int> = context.dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { prefs -> prefs[Keys.VIRTUALIZER_STRENGTH] ?: 0 }
+
+    suspend fun setVirtualizerStrength(strength: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.VIRTUALIZER_STRENGTH] = strength
         }
     }
 

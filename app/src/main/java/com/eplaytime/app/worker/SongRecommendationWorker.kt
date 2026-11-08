@@ -86,7 +86,7 @@ class SongRecommendationWorker @AssistedInject constructor(
 
         // Custom Layout for Notification? Standard BigText is fine.
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.icon)
+            .setSmallIcon(R.drawable.ic_audia_notification)
             .setContentTitle("Audia Player")
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))

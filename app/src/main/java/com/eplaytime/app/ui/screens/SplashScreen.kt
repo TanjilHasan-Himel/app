@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.layout.ContentScale
@@ -91,19 +93,33 @@ fun SplashScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Logo with scale and pulse
-            // Logo with scale and pulse
-            Image(
-                painter = painterResource(id = R.drawable.audia_player_logo),
-                contentDescription = "Audia Player Logo",
-                contentScale = ContentScale.Crop,
+            // Clean Logo with gentle ambient pulse (No yellow ring, no clunky clip)
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(180.dp) // Slightly larger
+                    .size(160.dp)
                     .scale(scale * pulse)
                     .alpha(alpha)
-                    .clip(CircleShape) // Circular Clip
-                    .border(2.dp, SoftGold.copy(alpha = 0.5f), CircleShape) // Optional: Gold border for premium feel
-            )
+            ) {
+                // Subtle warm ambient backlight behind glyph
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .blur(36.dp)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(SoftGold.copy(alpha = 0.35f), Color.Transparent)
+                            )
+                        )
+                )
+
+                Image(
+                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                    contentDescription = "Audia Player Logo",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(140.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

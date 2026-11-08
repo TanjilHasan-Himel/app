@@ -9,6 +9,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Policy
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +31,7 @@ fun SettingsDialog(
     onToggleFilter: (Boolean) -> Unit,
     currentCallFilterState: Boolean,
     onToggleCallFilter: (Boolean) -> Unit,
+    onOpenScanFilters: () -> Unit = {},
     onTermsClick: () -> Unit,
     onAboutClick: () -> Unit
 ) {
@@ -45,7 +48,7 @@ fun SettingsDialog(
                 Column(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Title
                     Row(
@@ -69,7 +72,52 @@ fun SettingsDialog(
                         }
                     }
 
-                    Divider(color = GlassBorder)
+                    HorizontalDivider(color = GlassBorder)
+
+                    // Scan Filters entry (Echo Music style)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                onDismiss()
+                                onOpenScanFilters()
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = null,
+                            tint = SoftGold,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Scan filters",
+                                fontFamily = OutfitFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 16.sp,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "Duration limits, Excluded / Included folders",
+                                fontFamily = OutfitFontFamily,
+                                fontWeight = FontWeight.Light,
+                                fontSize = 12.sp,
+                                color = TextSecondary
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = SoftGold.copy(alpha = 0.8f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    HorizontalDivider(color = GlassBorder)
 
                     // Smart Filter Toggle
                     Row(
@@ -104,7 +152,7 @@ fun SettingsDialog(
                         }
                         Switch(
                             checked = currentFilterState,
-                            onCheckedChange = onToggleFilter,
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.Black,
                                 checkedTrackColor = SoftGold,
@@ -147,7 +195,7 @@ fun SettingsDialog(
                         }
                         Switch(
                             checked = currentCallFilterState,
-                            onCheckedChange = onToggleCallFilter,
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.Black,
                                 checkedTrackColor = SoftGold,
@@ -157,7 +205,7 @@ fun SettingsDialog(
                         )
                     }
 
-                    Divider(color = GlassBorder)
+                    HorizontalDivider(color = GlassBorder)
 
                     // Links
                     SettingsLink(
@@ -172,7 +220,19 @@ fun SettingsDialog(
                     SettingsLink(
                         icon = Icons.Default.Policy,
                         title = "Terms & Conditions",
-                        onClick = onTermsClick // Use placeholder or navigate to a text screen
+                        onClick = {
+                            onDismiss()
+                            onTermsClick()
+                        }
+                    )
+
+                    SettingsLink(
+                        icon = Icons.Default.Policy,
+                        title = "Privacy Policy",
+                        onClick = {
+                            onDismiss()
+                            onTermsClick()
+                        }
                     )
                 }
             }

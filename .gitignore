@@ -17,3 +17,12 @@ local.properties
 build/
 app/build/
 .gradle/
+
+# Temporary logs and cache
+.kotlin/
+*.log
+
+# Debug dumps and test captures in root
+/*.png
+/*.xml
+

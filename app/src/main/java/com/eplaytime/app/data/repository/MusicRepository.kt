@@ -82,36 +82,81 @@ class MusicRepository @Inject constructor(
         private const val MIN_DURATION_MS = 30000L
     }
 
+    data class ScanSummary(
+        val totalFound: Int,
+        val excludedCount: Int
+    )
+
     /**
      * Get all songs from Local Database (with in-memory filtering)
-     * This is FAST and does NOT access MediaStore.
+     * Supports Echo Music-style duration thresholds and folder exclusion/inclusion.
      */
-    suspend fun getAllSongs(filterShortAudio: Boolean = false, filterCallRecordings: Boolean = false): List<Song> = withContext(Dispatchers.IO) {
-        // 1. Fetch from DB
-        val allSongs = songDao.getAllSongs()
+    suspend fun getAllSongs(
+        filterShortAudio: Boolean = false,
+        filterCallRecordings: Boolean = false,
+        minDurationSec: Int = if (filterShortAudio) 30 else 0,
+        folderFilterMode: String = "EXCLUDE",
+        filteredFolders: Set<String> = emptySet()
+    ): List<Song> = withContext(Dispatchers.IO) {
+        // 1. Fetch from DB (auto-scan if empty)
+        var allSongs = songDao.getAllSongs()
+        if (allSongs.isEmpty()) {
+            val fresh = scanFromMediaStore()
+            if (fresh.isNotEmpty()) {
+                songDao.insertAll(fresh)
+                allSongs = fresh
+            }
+        }
         
-        // 2. Apply Filters in Memory
+        val effectiveMinDurationMs = if (minDurationSec > 0) minDurationSec * 1000L else if (filterShortAudio) 30000L else 0L
+        val normalizedFilterPaths = filteredFolders
+            .filter { it.isNotBlank() }
+            .map { it.lowercase().replace('\\', '/').trimEnd('/') }
+
+        // 2. Apply Filters in Memory with multi-field deep matching
         val filteredSongs = allSongs.filter { song ->
             var include = true
             
-            // Filter Short Audio
-            if (filterShortAudio && song.duration < MIN_DURATION_MS) {
+            // Filter Short Audio (configurable duration threshold)
+            if (effectiveMinDurationMs > 0L && (song.duration < effectiveMinDurationMs || song.duration <= 0L)) {
                 include = false
             }
             
-            // Filter Call Recordings
+            // Filter Call Recordings & Voice Memos (inspect folderPath, bucket, title)
             if (include && filterCallRecordings) {
-                val path = song.folderPath.lowercase() // normalized path or data
-                // Note: Song.folderPath is populated in scanFromMediaStore.
-                // We also check uri or title if needed, but path is best.
-                // The filter logic from SQL: NOT LIKE %/Call/% etc.
-                if (path.contains("/call/") || 
-                    path.contains("/record") || 
-                    path.contains("/voice") || 
-                    path.contains("whatsapp audio")) {
+                val path = song.folderPath.lowercase()
+                val bucket = song.bucketDisplayName.lowercase()
+                val title = song.title.lowercase()
+                val isCallOrVoice = path.contains("/call") || path.contains("call_") ||
+                    path.contains("/record") || path.contains("voice") ||
+                    path.contains("whatsapp") || path.contains("audio record") ||
+                    bucket.contains("call") || bucket.contains("record") ||
+                    bucket.contains("voice") || bucket.contains("whatsapp") ||
+                    title.startsWith("call_") || title.startsWith("recording_") || title.startsWith("voice ") ||
+                    title.startsWith("rec_") || title.startsWith("aud-")
+                if (isCallOrVoice) {
                     include = false
                 }
             }
+
+            // Folder Filter Mode: Exclude vs Include only
+            if (include && normalizedFilterPaths.isNotEmpty()) {
+                val songPath = song.folderPath.lowercase().replace('\\', '/')
+                val matchesFolder = normalizedFilterPaths.any { folder ->
+                    songPath.startsWith(folder) || songPath.contains("/$folder/") || songPath.contains(folder)
+                }
+
+                if (folderFilterMode.equals("INCLUDE", ignoreCase = true)) {
+                    if (!matchesFolder) {
+                        include = false
+                    }
+                } else {
+                    if (matchesFolder) {
+                        include = false
+                    }
+                }
+            }
+
             include
         }
 
@@ -121,19 +166,34 @@ class MusicRepository @Inject constructor(
 
     /**
      * Rescan device for music files
-     * Scans MediaStore (SLOW) -> Updates Database -> Returns fresh list
+     * Scans MediaStore (SLOW) -> Updates Database -> Returns ScanSummary
      */
-    suspend fun rescanDevice(filterShortAudio: Boolean = false, filterCallRecordings: Boolean = false) {
-        withContext(Dispatchers.IO) {
-            val freshSongs = scanFromMediaStore()
-            Log.d(TAG, "Scanned ${freshSongs.size} songs from MediaStore. Updating Database...")
-            
-            songDao.deleteAll()
-            songDao.insertAll(freshSongs)
-            
-            // Refresh exposed flow with filters applied
-            getAllSongs(filterShortAudio, filterCallRecordings)
-        }
+    suspend fun rescanDevice(
+        filterShortAudio: Boolean = false,
+        filterCallRecordings: Boolean = false,
+        minDurationSec: Int = if (filterShortAudio) 30 else 0,
+        folderFilterMode: String = "EXCLUDE",
+        filteredFolders: Set<String> = emptySet()
+    ): ScanSummary = withContext(Dispatchers.IO) {
+        val freshSongs = scanFromMediaStore()
+        Log.d(TAG, "Scanned ${freshSongs.size} songs from MediaStore. Updating Database...")
+        
+        songDao.deleteAll()
+        songDao.insertAll(freshSongs)
+        
+        // Refresh exposed flow with filters applied
+        val filtered = getAllSongs(
+            filterShortAudio = filterShortAudio,
+            filterCallRecordings = filterCallRecordings,
+            minDurationSec = minDurationSec,
+            folderFilterMode = folderFilterMode,
+            filteredFolders = filteredFolders
+        )
+
+        ScanSummary(
+            totalFound = freshSongs.size,
+            excludedCount = (freshSongs.size - filtered.size).coerceAtLeast(0)
+        )
     }
 
     /**

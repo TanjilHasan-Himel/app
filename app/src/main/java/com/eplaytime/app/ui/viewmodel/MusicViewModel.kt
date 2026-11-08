@@ -14,7 +14,12 @@ import androidx.media3.session.SessionToken
 import com.eplaytime.app.data.datastore.LoopPreset
 import com.eplaytime.app.data.datastore.PlayTimeDataStore
 import com.eplaytime.app.data.database.FavoriteSong
+import com.eplaytime.app.data.database.PlayTimeDatabase
+import com.eplaytime.app.data.model.ParsedLyrics
 import com.eplaytime.app.data.model.Song
+import com.eplaytime.app.data.model.SongWikiData
+import com.eplaytime.app.data.network.LrcLibClient
+import com.eplaytime.app.data.network.SongWikiClient
 import com.eplaytime.app.data.repository.Album
 import com.eplaytime.app.data.repository.Artist
 import com.eplaytime.app.data.repository.FavoritesRepository
@@ -25,14 +30,17 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -70,6 +78,26 @@ class MusicViewModel @Inject constructor(
     // State flows for UI
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
+
+    // Lyrics Engine
+    private val lyricsDao = PlayTimeDatabase.getDatabase(context).lyricsDao()
+    private val lrcLibClient = LrcLibClient(context, lyricsDao)
+
+    private val _currentLyrics = MutableStateFlow<ParsedLyrics?>(null)
+    val currentLyrics: StateFlow<ParsedLyrics?> = _currentLyrics.asStateFlow()
+
+    private val _isLyricsLoading = MutableStateFlow(false)
+    val isLyricsLoading: StateFlow<Boolean> = _isLyricsLoading.asStateFlow()
+
+    // Song Wiki Engine
+    private val songWikiDao = PlayTimeDatabase.getDatabase(context).songWikiDao()
+    private val songWikiClient = SongWikiClient(context, songWikiDao)
+
+    private val _currentSongWiki = MutableStateFlow<SongWikiData?>(null)
+    val currentSongWiki: StateFlow<SongWikiData?> = _currentSongWiki.asStateFlow()
+
+    private val _isSongWikiLoading = MutableStateFlow(false)
+    val isSongWikiLoading: StateFlow<Boolean> = _isSongWikiLoading.asStateFlow()
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -130,9 +158,41 @@ class MusicViewModel @Inject constructor(
     private val _loopEnabled = MutableStateFlow(false)
     val loopEnabled: StateFlow<Boolean> = _loopEnabled.asStateFlow()
 
-    // Audio Session ID for Visualizer
+    // Audio Session ID for Visualizer & Real-time FFT Frequency Analysis
     private val _audioSessionId = MutableStateFlow(0)
     val audioSessionId: StateFlow<Int> = _audioSessionId.asStateFlow()
+    val visualizerHelper = com.eplaytime.app.util.VisualizerHelper()
+
+    // Global in-app HUD notification message
+    private val _inAppNotification = MutableStateFlow<String?>(null)
+    val inAppNotification: StateFlow<String?> = _inAppNotification.asStateFlow()
+    private var inAppNotificationJob: Job? = null
+
+    fun showInAppNotification(message: String) {
+        inAppNotificationJob?.cancel()
+        _inAppNotification.value = message
+        inAppNotificationJob = viewModelScope.launch {
+            delay(2400)
+            if (_inAppNotification.value == message) {
+                _inAppNotification.value = null
+            }
+        }
+    }
+
+    fun dismissInAppNotification() {
+        inAppNotificationJob?.cancel()
+        _inAppNotification.value = null
+    }
+
+    fun updateVisualizerState() {
+        val sessionId = _audioSessionId.value
+        val playing = _isPlaying.value
+        if (playing && sessionId > 0) {
+            visualizerHelper.start(context, sessionId)
+        } else {
+            visualizerHelper.stop()
+        }
+    }
 
     private val _playbackSpeed = MutableStateFlow(1.0f)
     val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
@@ -149,8 +209,83 @@ class MusicViewModel @Inject constructor(
     private val _stopAfterCurrentSong = MutableStateFlow(false)
     val stopAfterCurrentSong: StateFlow<Boolean> = _stopAfterCurrentSong.asStateFlow()
 
+    private val _isShortAudioHidden = MutableStateFlow(false)
+    val isShortAudioHidden: StateFlow<Boolean> = _isShortAudioHidden.asStateFlow()
+
+    private val _isCallRecordingHidden = MutableStateFlow(false)
+    val isCallRecordingHidden: StateFlow<Boolean> = _isCallRecordingHidden.asStateFlow()
+
+    // Echo Music Scan Filters & Storage Manager
+    val minSongDurationSec: StateFlow<Int> = dataStore.minSongDurationSec
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 30)
+
+    val folderFilterMode: StateFlow<String> = dataStore.folderFilterMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "EXCLUDE")
+
+    val filteredFolders: StateFlow<Set<String>> = dataStore.filteredFolders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    val lastScanFoundCount: StateFlow<Int> = dataStore.lastScanFoundCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val lastScanExcludedCount: StateFlow<Int> = dataStore.lastScanExcludedCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    fun setMinSongDurationSec(sec: Int) {
+        viewModelScope.launch {
+            dataStore.setMinSongDurationSec(sec)
+            _isShortAudioHidden.value = (sec > 0)
+            applyScanFiltersInMemory()
+        }
+    }
+
+    fun setFolderFilterMode(mode: String) {
+        viewModelScope.launch {
+            dataStore.setFolderFilterMode(mode)
+            applyScanFiltersInMemory()
+        }
+    }
+
+    fun addFilteredFolder(path: String) {
+        viewModelScope.launch {
+            dataStore.addFilteredFolder(path)
+            applyScanFiltersInMemory()
+        }
+    }
+
+    fun removeFilteredFolder(path: String) {
+        viewModelScope.launch {
+            dataStore.removeFilteredFolder(path)
+            applyScanFiltersInMemory()
+        }
+    }
+
+    private fun applyScanFiltersInMemory() {
+        viewModelScope.launch {
+            val minSec = minSongDurationSec.value
+            val callFilter = _isCallRecordingHidden.value
+            val mode = folderFilterMode.value
+            val folders = filteredFolders.value
+
+            val songs = withContext(Dispatchers.IO) {
+                musicRepository.getAllSongs(
+                    filterShortAudio = minSec > 0,
+                    filterCallRecordings = callFilter,
+                    minDurationSec = minSec,
+                    folderFilterMode = mode,
+                    filteredFolders = folders
+                )
+            }
+            _songList.value = songs
+            recalculatePlayLists()
+        }
+    }
+
     private val _loopPresetsForCurrentSong = MutableStateFlow<List<LoopPreset>>(emptyList())
     val loopPresetsForCurrentSong: StateFlow<List<LoopPreset>> = _loopPresetsForCurrentSong.asStateFlow()
+
+    val allLoopPresets: StateFlow<Map<String, List<LoopPreset>>> = dataStore.loopPresets
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     // Visualizer Style Carousel
     enum class VisualizerStyle { LIQUID_FILL, NEON_LINE, CLASSIC_BARS }
@@ -166,6 +301,9 @@ class MusicViewModel @Inject constructor(
     val bassBoostStrength: StateFlow<Int> = dataStore.bassBoostStrength
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), 0)
 
+    val virtualizerStrength: StateFlow<Int> = dataStore.virtualizerStrength
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), 0)
+
     val eqBandsLevels: StateFlow<String> = dataStore.eqBandsLevels
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), "")
 
@@ -173,6 +311,13 @@ class MusicViewModel @Inject constructor(
         viewModelScope.launch {
             dataStore.setBassBoostStrength(strength)
             com.eplaytime.app.util.AudioEffectManager.setBassBoostStrength(strength.toShort())
+        }
+    }
+
+    fun setVirtualizerStrength(strength: Int) {
+        viewModelScope.launch {
+            dataStore.setVirtualizerStrength(strength)
+            com.eplaytime.app.util.AudioEffectManager.setVirtualizerStrength(strength.toShort())
         }
     }
 
@@ -187,6 +332,17 @@ class MusicViewModel @Inject constructor(
                 levelsList.add(com.eplaytime.app.util.AudioEffectManager.getBandLevel(i.toShort()))
             }
             val levelsStr = levelsList.joinToString(",")
+            dataStore.setEqBandsLevels(levelsStr)
+        }
+    }
+
+    fun applyEqPreset(presetName: String) {
+        val preset = com.eplaytime.app.util.AudioEffectManager.PRESETS[presetName] ?: return
+        viewModelScope.launch {
+            preset.forEachIndexed { index, level ->
+                com.eplaytime.app.util.AudioEffectManager.setBandLevel(index.toShort(), level)
+            }
+            val levelsStr = preset.joinToString(",")
             dataStore.setEqBandsLevels(levelsStr)
         }
     }
@@ -258,6 +414,11 @@ class MusicViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            dataStore.virtualizerStrength.collect { strength ->
+                com.eplaytime.app.util.AudioEffectManager.setVirtualizerStrength(strength.toShort())
+            }
+        }
+        viewModelScope.launch {
             dataStore.eqBandsLevels.collect { levelsStr ->
                 if (levelsStr.isNotBlank()) {
                     val levels = levelsStr.split(",").mapNotNull { it.toShortOrNull() }
@@ -266,6 +427,12 @@ class MusicViewModel @Inject constructor(
                     }
                 }
             }
+        }
+        viewModelScope.launch {
+            dataStore.filterShortAudio.collect { _isShortAudioHidden.value = it }
+        }
+        viewModelScope.launch {
+            dataStore.filterCallRecordings.collect { _isCallRecordingHidden.value = it }
         }
     }
 
@@ -289,10 +456,12 @@ class MusicViewModel @Inject constructor(
         _recentPlayedSongs.value = recentPlayedUrisCache
             .mapNotNull { songsByUri[it] }
             .distinctBy { it.uri }
+            .take(15)
 
         _mostPlayedSongs.value = playCountsCache.entries
             .sortedByDescending { it.value }
             .mapNotNull { (uri, _) -> songsByUri[uri] }
+            .take(7)
     }
 
     private fun markSongPlayed(uri: String) {
@@ -441,7 +610,13 @@ class MusicViewModel @Inject constructor(
             {
                 mediaController = controllerFuture?.get()
                 isControllerReady = true
-                isControllerReady = true
+                val extrasSessionId = mediaController?.sessionExtras?.getInt("AUDIO_SESSION_ID") ?: 0
+                if (extrasSessionId > 0) {
+                    _audioSessionId.value = extrasSessionId
+                    com.eplaytime.app.util.AudioEffectManager.initialize(extrasSessionId)
+                    updateVisualizerState()
+                    android.util.Log.d("MusicViewModel", "Retrieved Audio Session ID from sessionExtras on connect: $extrasSessionId")
+                }
                 setupPlayerListener()
                 preparePlaylistIfReady()
                 requestAudioSessionId()
@@ -475,26 +650,34 @@ class MusicViewModel @Inject constructor(
                 // Reset progress immediately on song change
                 _progress.value = 0L
                 _duration.value = mediaController?.duration?.takeIf { it > 0 } ?: 0L
+                if (_audioSessionId.value <= 0) {
+                    requestAudioSessionId()
+                }
                 
-                // Update current song object if needed
-                mediaItem?.localConfiguration?.uri?.toString()?.let { uri ->
-                    val song = _songList.value.find { it.uri == uri }
-                    if (song != null) {
-                        _currentSong.value = song
-                        // Fallback duration from metadata if controller isn't ready
-                        if (_duration.value == 0L && song.duration > 0) {
-                            _duration.value = song.duration
-                        }
-                    } else if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
-                         // Only create temp song if we really have to
-                    }
+                // Update current song object with robust 3-way matching (URI, MediaID, or Playlist Index)
+                val targetUri = mediaItem?.localConfiguration?.uri?.toString()
+                    ?: mediaItem?.requestMetadata?.mediaUri?.toString()
+                val targetId = mediaItem?.mediaId
 
-                    // Save to DataStore
-                    viewModelScope.launch {
-                        dataStore.saveLastSong(uri, _currentSong.value?.title ?: "Song")
+                val song = _songList.value.find { 
+                    (targetUri != null && it.uri == targetUri) || 
+                    (targetId != null && (it.id.toString() == targetId || it.uri == targetId))
+                } ?: mediaController?.currentMediaItemIndex?.let { idx ->
+                    _songList.value.getOrNull(idx)
+                }
+
+                if (song != null) {
+                    _currentSong.value = song
+                    loadLyricsForSong(song)
+                    if (_duration.value == 0L && song.duration > 0) {
+                        _duration.value = song.duration
                     }
-                    markSongPlayed(uri)
+                    viewModelScope.launch {
+                        dataStore.saveLastSong(song.uri, song.title)
+                    }
+                    markSongPlayed(song.uri)
                     refreshCurrentSongLoopPresets()
+                    android.util.Log.d("MusicViewModel", "Track transitioned to: ${song.title} (${song.artist}) via reason=$reason")
                 }
             }
 
@@ -503,17 +686,26 @@ class MusicViewModel @Inject constructor(
                 if (playbackState == Player.STATE_READY) {
                     _duration.value = mediaController?.duration?.takeIf { it > 0 } ?: 0L
                     _isPlaying.value = mediaController?.isPlaying == true
+                    if (_audioSessionId.value <= 0) {
+                        requestAudioSessionId()
+                    }
+                    updateVisualizerState()
                 }
                 if (playbackState == Player.STATE_ENDED) {
                     _isPlaying.value = false
                     stopProgressUpdates()
+                    updateVisualizerState()
                 }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
+                updateVisualizerState()
                 if (isPlaying) {
                     startProgressUpdates()
+                    if (_audioSessionId.value <= 0) {
+                        requestAudioSessionId()
+                    }
                 } else {
                     stopProgressUpdates()
                     // EAGER SAVE: Save state immediately on Pause (Notification/Earbuds)
@@ -526,10 +718,11 @@ class MusicViewModel @Inject constructor(
             }
 
             override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
-                 // EAGER SAVE: Save state on Seek/Skip
+                 // EAGER SAVE & PROGRESS SYNC: Save state and sync progress on Seek/Skip from Notification or Lockscreen
+                 _progress.value = newPosition.positionMs
                  viewModelScope.launch {
                     _currentSong.value?.let { song ->
-                        dataStore.savePlaybackState(song.uri, mediaController?.currentPosition ?: 0L, _playbackSpeed.value, _shuffleEnabled.value, _repeatMode.value)
+                        dataStore.savePlaybackState(song.uri, newPosition.positionMs, _playbackSpeed.value, _shuffleEnabled.value, _repeatMode.value)
                     }
                 }
             }
@@ -547,17 +740,26 @@ class MusicViewModel @Inject constructor(
     /**
      * Load songs from device storage
      */
-    fun loadLocalSongs() {
+    fun loadLocalSongs(
+        filterShortAudio: Boolean? = null,
+        filterCallRecordings: Boolean? = null
+    ) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                // OPTIMIZATION: Move heavy loading to IO thread
+                val minSec = minSongDurationSec.value
+                val callFilter = filterCallRecordings ?: _isCallRecordingHidden.value
+                val mode = folderFilterMode.value
+                val folders = filteredFolders.value
+                
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    // Get filter settings
-                    val filterShortAudio = dataStore.filterShortAudio.first()
-                    val filterCallRecordings = dataStore.filterCallRecordings.first()
-                    
-                    val songs = musicRepository.getAllSongs(filterShortAudio, filterCallRecordings)
+                    val songs = musicRepository.getAllSongs(
+                        filterShortAudio = minSec > 0,
+                        filterCallRecordings = callFilter,
+                        minDurationSec = minSec,
+                        folderFilterMode = mode,
+                        filteredFolders = folders
+                    )
                     _songList.value = songs
                     recalculatePlayLists()
 
@@ -567,8 +769,6 @@ class MusicViewModel @Inject constructor(
                     _folders.value = musicRepository.getAllFolders()
                 }
 
-                // CRITICAL FIX: Do NOT force prepare. Use false.
-                // If we force true, we overwrite the restored state (position) with 0!
                 preparePlaylistIfReady(force = false)
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -585,25 +785,39 @@ class MusicViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             try {
+                val minSec = minSongDurationSec.value
+                val filterCallRecordings = _isCallRecordingHidden.value
+                val mode = folderFilterMode.value
+                val folders = filteredFolders.value
+
                 // OPTIMIZATION: Move heavy loading to IO thread
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val filterShortAudio = dataStore.filterShortAudio.first()
-                    val filterCallRecordings = dataStore.filterCallRecordings.first()
-                    musicRepository.rescanDevice(filterShortAudio, filterCallRecordings)
+                val summary = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val scanResult = musicRepository.rescanDevice(
+                        filterShortAudio = minSec > 0,
+                        filterCallRecordings = filterCallRecordings,
+                        minDurationSec = minSec,
+                        folderFilterMode = mode,
+                        filteredFolders = folders
+                    )
+                    dataStore.saveLastScanCounts(scanResult.totalFound, scanResult.excludedCount)
+
                     val songs = musicRepository.songs.value
-                    _songList.value = songs // Correct property
+                    _songList.value = songs
                     recalculatePlayLists()
                     
                     // Reload categories
                     _albums.value = musicRepository.getAllAlbums()
                     _artists.value = musicRepository.getAllArtists()
                     _folders.value = musicRepository.getAllFolders()
+
+                    scanResult
                 }
                 // Reset sync flag
                 _hasNewSongs.value = false
                 
                 // Rescan should validly update the list but NOT reset playback if already running
                 preparePlaylistIfReady(force = false)
+                showInAppNotification("Scanned ${summary.totalFound} songs (${summary.excludedCount} filtered)")
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -619,6 +833,20 @@ class MusicViewModel @Inject constructor(
      * Restore playback state from DataStore
      * ROBUSTNESS FIX: Waits for song list to load before attempting restore
      */
+    private fun Song.toMediaItem(): MediaItem {
+        val metadata = androidx.media3.common.MediaMetadata.Builder()
+            .setTitle(title)
+            .setArtist(artist)
+            .setAlbumTitle(album)
+            .setArtworkUri(albumArtUri?.let { android.net.Uri.parse(it) })
+            .build()
+        return MediaItem.Builder()
+            .setUri(uri)
+            .setMediaId(id.toString())
+            .setMediaMetadata(metadata)
+            .build()
+    }
+
     private fun restorePlaybackState() {
         viewModelScope.launch {
             try {
@@ -641,19 +869,20 @@ class MusicViewModel @Inject constructor(
                     val song = _songList.value.find { it.uri == state.lastSongUri }
                     if (song != null) {
                         _currentSong.value = song
+                        loadLyricsForSong(song)
                         android.util.Log.d("MusicViewModel", "âœ“ Restored state: ${song.title} at ${state.lastPosition}ms")
                         
                         // Prepare but don't play
                         mediaController?.let { controller ->
                             val index = _songList.value.indexOfFirst { it.uri == state.lastSongUri }
                             if (index >= 0) {
-                                val mediaItems = _songList.value.map { s ->
-                                    MediaItem.Builder()
-                                        .setUri(s.uri)
-                                        .setMediaId(s.id.toString())
-                                        .build()
-                                }
+                                val mediaItems = _songList.value.map { it.toMediaItem() }
                                 controller.setMediaItems(mediaItems, index, state.lastPosition)
+
+
+
+
+
                                 controller.prepare()
                                 controller.setPlaybackSpeed(state.lastPlaybackSpeed)
                                 controller.pause() // Ensure it starts PAUSED
@@ -698,12 +927,11 @@ class MusicViewModel @Inject constructor(
         // If we are restored, we might have set items already. Check if we need to force update.
         if (playlistPrepared && !force) return
 
-        val mediaItems = songs.map { song ->
-            MediaItem.Builder()
-                .setUri(song.uri)
-                .setMediaId(song.id.toString())
-                .build()
-        }
+        val mediaItems = songs.map { it.toMediaItem() }
+
+
+
+
 
         // Only set items if we are NOT currently playing or if forced (e.g., refresh)
         if (!controller.isPlaying || force) {
@@ -745,12 +973,7 @@ class MusicViewModel @Inject constructor(
                 val routePosition = dataStore.getRoutePosition(uri, route)
                 val startPosition = routeAdjustedStartPosition(routePosition, route)
 
-                val mediaItems = _songList.value.map { song -> 
-                    MediaItem.Builder()
-                        .setUri(song.uri)
-                        .setMediaId(song.id.toString())
-                        .build()
-                }
+                val mediaItems = _songList.value.map { it.toMediaItem() }
 
                 controller.setMediaItems(mediaItems, songIndex, startPosition)
                 controller.prepare()
@@ -767,10 +990,12 @@ class MusicViewModel @Inject constructor(
                 playlistPrepared = true
                 pendingPlayUri = null
                 _currentSong.value = _songList.value[songIndex]
+                loadLyricsForSong(_songList.value[songIndex])
 
                 // Clear A-B loop when new song starts
                 clearLoop()
                 refreshCurrentSongLoopPresets()
+                requestAudioSessionId()
 
                 // LAYER 2: ELEPHANT MEMORY - Save immediately
                 dataStore.savePlaybackState(
@@ -848,6 +1073,82 @@ class MusicViewModel @Inject constructor(
                  dataStore.saveRoutePosition(song.uri, detectAudioRoute(), position)
              }
         }
+    }
+
+    /**
+     * Load synchronized lyrics for the specified song from local cache, .lrc file, or LRCLIB
+     */
+    fun loadLyricsForSong(song: Song?) {
+        if (song == null) {
+            _currentLyrics.value = null
+            return
+        }
+        viewModelScope.launch {
+            _isLyricsLoading.value = true
+            try {
+                val lyrics = lrcLibClient.getLyricsForSong(song)
+                _currentLyrics.value = lyrics
+            } catch (e: Exception) {
+                _currentLyrics.value = null
+            } finally {
+                _isLyricsLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Load Song Wiki background story and creative credits (Wikipedia + MusicBrainz)
+     */
+    fun loadSongWiki(song: Song?) {
+        if (song == null) {
+            _currentSongWiki.value = null
+            return
+        }
+        viewModelScope.launch {
+            _isSongWikiLoading.value = true
+            try {
+                val wiki = songWikiClient.getWikiForSong(song)
+                _currentSongWiki.value = wiki
+            } catch (e: Exception) {
+                _currentSongWiki.value = null
+            } finally {
+                _isSongWikiLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Update metadata tags and cover artwork for a track in Song Garage
+     */
+    fun updateSongTags(songId: Long, newTitle: String, newArtist: String, newAlbum: String, newArtUri: String? = null) {
+        viewModelScope.launch {
+            val updatedList = _songList.value.map { song ->
+                if (song.id == songId) {
+                    song.copy(
+                        title = newTitle.ifBlank { song.title },
+                        artist = newArtist.ifBlank { song.artist },
+                        album = newAlbum.ifBlank { song.album },
+                        albumArtUri = newArtUri ?: song.albumArtUri
+                    )
+                } else song
+            }
+            _songList.value = updatedList
+
+            if (_currentSong.value?.id == songId) {
+                _currentSong.value = updatedList.firstOrNull { it.id == songId }
+            }
+        }
+    }
+
+    fun updateCurrentSongAlbumArt(newArtUri: String) {
+        val song = _currentSong.value ?: return
+        updateSongTags(
+            songId = song.id,
+            newTitle = song.title,
+            newArtist = song.artist,
+            newAlbum = song.album,
+            newArtUri = newArtUri
+        )
     }
 
     fun setPlaybackSpeed(speed: Float) {
@@ -1055,10 +1356,14 @@ class MusicViewModel @Inject constructor(
                 _loopStart.value = _progress.value
             }
             _loopEnd.value == null -> {
-                // Set Point B and activate
+                // Set Point B and activate seamlessly (auto-ordering start and end)
                 val currentPos = _progress.value
-                if (currentPos > (_loopStart.value ?: 0L)) {
-                    _loopEnd.value = currentPos
+                val start = _loopStart.value ?: 0L
+                if (kotlin.math.abs(currentPos - start) >= 500L) {
+                    val pA = kotlin.math.min(start, currentPos)
+                    val pB = kotlin.math.max(start, currentPos)
+                    _loopStart.value = pA
+                    _loopEnd.value = pB
                     _loopEnabled.value = true
                 }
             }
@@ -1099,10 +1404,21 @@ class MusicViewModel @Inject constructor(
         seekTo(preset.startMs)
     }
 
-    fun deleteLoopPreset(name: String) {
-        val songUri = _currentSong.value?.uri ?: return
+    fun playLoopPreset(songUri: String, preset: LoopPreset) {
+        val currentUri = _currentSong.value?.uri
+        if (currentUri != songUri) {
+            playSong(songUri)
+        }
+        _loopStart.value = preset.startMs
+        _loopEnd.value = preset.endMs
+        _loopEnabled.value = true
+        seekTo(preset.startMs)
+    }
+
+    fun deleteLoopPreset(name: String, songUri: String? = null) {
+        val targetUri = songUri ?: _currentSong.value?.uri ?: return
         viewModelScope.launch {
-            dataStore.removeLoopPreset(songUri, name)
+            dataStore.removeLoopPreset(targetUri, name)
             refreshCurrentSongLoopPresets()
         }
     }
@@ -1241,20 +1557,21 @@ class MusicViewModel @Inject constructor(
     // ====== Settings / Filter ======
 
     /**
-     * Observe filter state
-     */
-    val isShortAudioHidden: StateFlow<Boolean> = dataStore.filterShortAudio
-        .stateIn(
-            scope = viewModelScope,
-            started = kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
-            initialValue = false
-        )
-
-    /**
      * Request Audio Session ID from Service
      */
-    private fun requestAudioSessionId() {
+    fun requestAudioSessionId() {
         val controller = mediaController ?: return
+
+        // 1. Proactively read from session extras if present
+        val extrasId = controller.sessionExtras.getInt("AUDIO_SESSION_ID")
+        if (extrasId > 0) {
+            _audioSessionId.value = extrasId
+            com.eplaytime.app.util.AudioEffectManager.initialize(extrasId)
+            updateVisualizerState()
+            android.util.Log.d("MusicViewModel", "Audio Session ID resolved from sessionExtras: $extrasId")
+        }
+
+        // 2. Query service directly via SessionCommand
         val command = androidx.media3.session.SessionCommand("ACTION_GET_AUDIO_SESSION_ID", android.os.Bundle.EMPTY)
         
         val future = controller.sendCustomCommand(command, android.os.Bundle.EMPTY)
@@ -1264,11 +1581,17 @@ class MusicViewModel @Inject constructor(
                     val result = future.get()
                     if (result.resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS) {
                         val sessionId = result.extras.getInt("AUDIO_SESSION_ID")
-                        _audioSessionId.value = sessionId
-                        android.util.Log.d("MusicViewModel", "Received Audio Session ID: $sessionId")
+                        if (sessionId > 0) {
+                            _audioSessionId.value = sessionId
+                            com.eplaytime.app.util.AudioEffectManager.initialize(sessionId)
+                            updateVisualizerState()
+                            android.util.Log.d("MusicViewModel", "Received Audio Session ID from command: $sessionId")
+                        }
+                    } else {
+                        android.util.Log.w("MusicViewModel", "requestAudioSessionId command returned resultCode: ${result.resultCode}")
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    android.util.Log.e("MusicViewModel", "Error requesting Audio Session ID", e)
                 }
             },
             MoreExecutors.directExecutor()
@@ -1279,32 +1602,27 @@ class MusicViewModel @Inject constructor(
      * Toggle "Smart Filter" (Hide audio < 30s)
      */
     fun toggleShortAudioFilter(enabled: Boolean) {
+        _isShortAudioHidden.value = enabled
         viewModelScope.launch {
             dataStore.setFilterShortAudio(enabled)
-            // FAST UPDATE: Just reload from DB with new filter
-            loadLocalSongs()
         }
+        loadLocalSongs(filterShortAudio = enabled)
     }
 
     /**
      * Observe call recording filter state
      */
-    val isCallRecordingHidden: StateFlow<Boolean> = dataStore.filterCallRecordings
-        .stateIn(
-            scope = viewModelScope,
-            started = kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
-            initialValue = false
-        )
+
 
     /**
      * Toggle "Hide Call Recordings"
      */
     fun toggleCallRecordingFilter(enabled: Boolean) {
+        _isCallRecordingHidden.value = enabled
         viewModelScope.launch {
             dataStore.setFilterCallRecordings(enabled)
-            // FAST UPDATE: Just reload from DB with new filter
-            loadLocalSongs()
         }
+        loadLocalSongs(filterCallRecordings = enabled)
     }
 
     /**
@@ -1383,6 +1701,7 @@ class MusicViewModel @Inject constructor(
      */
     override fun onCleared() {
         super.onCleared()
+        visualizerHelper.stop()
         stopProgressUpdates()
         cancelSleepTimer()
         volumeFadeJob?.cancel()

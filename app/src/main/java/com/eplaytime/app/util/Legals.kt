@@ -1,111 +1,123 @@
 package com.eplaytime.app.util
 
+/**
+ * Audia Player legal text — review draft, 2026-11-08.
+ *
+ * IMPORTANT BEFORE SHIPPING:
+ * 1) Verify ALL factual statements against the release APK/AAB, merged manifest,
+ *    dependencies/SDKs, actual network traffic, and Android backup rules.
+ * 2) This draft assumes a local-first player with no developer-operated cloud,
+ *    advertising, analytics, or crash-reporting SDKs.
+ * 3) If network lyrics, Shazam, Firebase, cloud sync, or other SDKs are enabled,
+ *    update the Privacy Policy, Play Data Safety answers, and consent flows FIRST.
+ * 4) Obtain local legal review before relying on these terms for legal protection.
+ */
 object Legals {
+
     const val EULA = """
-TERMS AND CONDITIONS AND END USER LICENSE AGREEMENT (EULA)
-App Name: Audia Player
+END USER LICENSE AGREEMENT AND TERMS OF USE
+Audia Player | Version 8.0.0
 Developer: Tanjil Hasan Himel
-Version: 8.0.0
-Effective Date: March 27, 2026
+Last Updated: November 8, 2026
+Contact: taanjilhasan@gmail.com
+GitHub: https://github.com/TanjilHasan-Himel
 
-1. ACKNOWLEDGMENT AND ACCEPTANCE
-This End User License Agreement ("Agreement") is a binding legal contract between you ("User") and Tanjil Hasan Himel ("Developer"). By downloading, installing, or using the Audia Player mobile application ("the App"), you acknowledge that you have read, understood, and agree to be bound by these terms. If you do not agree to these terms, you are strictly prohibited from using the App and must uninstall it immediately.
+1. ACCEPTANCE AND SCOPE
+These Terms govern your use of Audia Player (the "App"), an Android application developed by Tanjil Hasan Himel (the "Developer"). By installing or using the App, you agree to these Terms to the extent permitted by applicable law. If you disagree, please stop using the App. Nothing in these Terms limits rights that cannot legally be waived.
 
-2. UNIQUE SELLING PROPOSITION (USP) & CORE FEATURES
-Audia Player is defined by its commitment to Privacy, Fidelity, and Precision. By using the App, you acknowledge the following core functionalities:
-• Precision Scheduler: Unlike standard players, Audia Player features a proprietary Audio Scheduling Engine. This allows users to program exact start times for local audio playback, functioning as a music alarm or automated background player.
-• Data Sovereignty (Privacy First): The App operates entirely offline. We do not collect, store, transmit, or sell your personal data, listening habits, or device location. Your business is your own.
-• Non-Destructive Operation: The App is designed with a "Read-Only" philosophy regarding your media files. The Scheduler and Playlist features organize your content but will never modify, corrupt, or delete your original audio files stored on the device.
-• Local Storage: All databases (including Favorites, Playlists, and Schedules) are stored locally within the App’s private sandbox on your device. You retain full ownership and control of your data.
+2. WHAT THE APP DOES
+Audia Player is designed to discover, organize, and play audio already accessible on your device. Features may include local playlists, favorites, smart folder filtering, background playback, and scheduled playback. Feature availability and performance may vary by Android version, hardware, permissions, device settings, and App version.
 
-3. LICENSE GRANT
-The Developer grants you a revocable, non-exclusive, non-transferable, limited license to download, install, and use the App strictly for your personal, non-commercial use on devices owned or controlled by you.
+3. LIMITED LICENSE
+Subject to these Terms, the Developer grants you a limited, non-exclusive, non-transferable, revocable license to install and use the App for lawful, personal, non-commercial purposes. You may not redistribute, sell, impersonate, or commercially exploit the App without permission, except as permitted by applicable law or applicable third-party licenses. Restrictions on reverse engineering or modification apply only to the extent permitted by law.
 
-4. USER CONTENT & COPYRIGHT COMPLIANCE
-• Local Interface: The App acts solely as a sophisticated interface to organize and play audio files already stored on your device's internal memory or SD card.
-• No Ownership Claim: The Developer does not claim ownership of any music or audio files accessed through the App.
-• User Responsibility: You are solely responsible for ensuring you possess the legal rights (copyrights) to the content you play. You agree not to use the App to infringe upon the intellectual property rights of others.
-• Smart Filtering: The App utilizes algorithms to categorize content (e.g., automatically hiding WhatsApp voice notes). While we strive for accuracy, the Developer is not liable for any content hidden, missed, or miscategorized by these automated filters.
+4. OWNERSHIP AND THIRD-PARTY COMPONENTS
+The Developer retains rights in the App's original code, branding, design, and original materials. Some components may be provided under separate open-source or third-party licenses; those licenses govern the relevant components and take precedence where applicable. These Terms do not transfer ownership of your audio files or third-party content to the Developer.
 
-5. LIMITATION OF LIABILITY: SCHEDULER & ALARMS
-You expressly acknowledge that the "Schedule Music" feature relies on the Android Operating System to execute precise timing.
-• Battery Optimization Warning: Hardware manufacturers (including but not limited to Samsung, Xiaomi, Pixel, OnePlus) utilize aggressive battery-saving protocols (e.g., "Doze Mode," "App Standby," or "Task Killers") that may forcibly terminate background apps to save power.
-• Waiver of Liability: While the App utilizes high-priority Foreground Services to ensure reliability, the Developer is NOT liable for any direct, indirect, or consequential damages (including missed flights, missed meetings, lost wages, or academic penalties) caused by:
-1. Missed alarms or schedules due to Android OS battery optimization or task killing.
-2. The device being powered off, out of battery, or in "Silent/DND Mode" during a scheduled event.
-3. Conflicts with other third-party alarm or audio applications.
+5. YOUR AUDIO FILES AND COPYRIGHT
+The App is a local media player, not a supplier of music licenses or copyrighted recordings. You are responsible for using audio you are legally entitled to access and for complying with applicable copyright law. You do not need to own copyright in every recording you lawfully listen to. The App is designed to read and organize existing media without intentionally altering the original audio files; however, you should keep independent backups of important files. Media scanning or filtering may occasionally classify a file incorrectly or omit it from the displayed library.
 
-6. INTELLECTUAL PROPERTY RIGHTS
-The visual design, architecture, source code, and custom algorithms (including the Scheduler Logic, Smart Folder, and Miniplayer Sync) are the exclusive intellectual property of Tanjil Hasan Himel.
-• Protection: You may not reverse engineer, decompile, disassemble, or create derivative works based on this App.
-• Global Rights: These rights are protected by international copyright laws and treaties.
+6. PERMISSIONS AND DEVICE INTEGRATION
+Depending on the Android version and features used, the App may request access to local audio, notification permissions, foreground media playback, or special access for scheduling alarms. You can manage supported permissions through Android Settings. Some features may not work when permissions are denied or revoked. System services, connected accessories, audio focus, and other apps may affect playback.
 
-7. UPDATES & MODIFICATIONS
-The Developer reserves the right to modify, suspend, or discontinue any feature (including the Scheduler or UI) at any time without notice. We may release updates to fix bugs or enhance features, but we are under no obligation to provide support or maintenance indefinitely.
+7. SCHEDULED PLAYBACK AND ALARM LIMITATIONS
+Scheduled playback is a convenience feature, NOT a safety-critical alarm or guaranteed wake-up service. The App attempts to start playback at the time you choose, but delivery and audible playback can be delayed or prevented by Android restrictions, revoked permissions, battery optimization, device shutdown, force-stop, low battery, Do Not Disturb, silent/volume settings, missing or moved audio files, Bluetooth/audio routing, restarts, or device-specific behavior. Exact timing and successful playback are not guaranteed. Do not rely on the feature as your sole reminder for medical, travel, examination, employment, emergency, or other time-critical obligations. Use a dedicated alarm and a backup when timing is important.
 
-8. DISCLAIMER OF WARRANTIES
-THE APP IS PROVIDED ON AN "AS IS" AND "AS AVAILABLE" BASIS. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE DEVELOPER DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. NO ADVICE OR INFORMATION, WHETHER ORAL OR WRITTEN, OBTAINED FROM THE DEVELOPER SHALL CREATE ANY WARRANTY NOT EXPRESSLY STATED HEREIN.
+8. AVAILABILITY, UPDATES, AND SUPPORT
+The Developer may improve, modify, suspend, or discontinue features or support, subject to applicable law. Changes to the App, Android, or device settings may affect compatibility. The Developer does not guarantee uninterrupted availability or future updates. Material changes to these Terms will be communicated through an appropriate App notice, release notes, or an updated document where reasonably practicable.
 
-9. INDEMNIFICATION (Universal Protection)
-You agree to indemnify, defend, and hold harmless the Developer from and against any and all claims, damages, losses, liabilities, costs, and expenses (including legal fees) arising from:
-1. Your use of the App.
-2. Your violation of this Agreement.
-3. Your violation of any third-party right, including without limitation any copyright, property, or privacy right.
+9. DISCLAIMER OF WARRANTIES
+To the maximum extent permitted by applicable law, the App is provided "as is" and "as available" without warranties of uninterrupted operation, exact alarm delivery, perfect media detection, error-free playback, or fitness for a particular purpose. Nothing in these Terms excludes a warranty or consumer right that applicable law does not permit to be excluded.
 
-10. GOVERNING LAW & JURISDICTION
-This Agreement shall be governed by and construed in accordance with the laws of Bangladesh. Any legal suit, action, or proceeding arising out of or related to this Agreement shall be instituted exclusively in the courts of the Developer's jurisdiction.
+10. LIMITATION OF LIABILITY
+To the maximum extent permitted by applicable law, the Developer is not liable for indirect, incidental, special, or consequential losses arising from use or inability to use the App, including missed schedules or loss of locally stored App settings. This provision does not exclude liability that cannot legally be limited or excluded, including liability for fraud or other non-excludable conduct under applicable law. Keep backups of important files and do not rely solely on scheduled playback for critical activities.
 
-11. CONTACT INFORMATION
-For technical support, bug reports, or legal inquiries, please contact the Developer directly.
-© 2026 Tanjil Hasan Himel. All Rights Reserved.
+11. RESPONSIBLE USE
+You agree not to misuse the App, attempt to compromise other users or systems through it, violate intellectual property rights, or use it in a way prohibited by applicable law. Where legally permitted, the Developer may stop providing access to versions or services that are misused.
+
+12. PRIVACY
+The App's handling of data is described separately in the Privacy Policy available within the App. That policy should be read together with these Terms. If the App adds online services or third-party analytics in the future, the relevant disclosures and any required choices will be updated before they are enabled.
+
+13. SEVERABILITY AND GOVERNING LAW
+If any provision is unenforceable, the remainder stays effective to the extent permitted by law. These Terms are governed by the laws of Bangladesh, subject to any mandatory consumer-protection or other applicable laws. Disputes may be brought before a competent court with lawful jurisdiction; this clause does not remove non-waivable rights.
+
+14. CONTACT
+For support, privacy, copyright, or legal inquiries, contact:
+Tanjil Hasan Himel — taanjilhasan@gmail.com
+GitHub: https://github.com/TanjilHasan-Himel
+
+© 2026 Tanjil Hasan Himel. All rights reserved in original materials.
 """
 
     const val PRIVACY_POLICY = """
 PRIVACY POLICY
-App Name: Audia Player | Developer: Tanjil Hasan Himel | Version: 8.0.0 Effective Date: July 3, 2026
+Audia Player | Version 8.0.0
+Developer: Tanjil Hasan Himel
+Last Updated: November 8, 2026
+Privacy Contact: taanjilhasan@gmail.com
+GitHub: https://github.com/TanjilHasan-Himel
 
-1. OUR PRIVACY COMMITMENT
-Audia Player is designed with a "Data Sovereignty" philosophy. Unlike many modern applications, we do not monetize your data, track your location, or profile your listening habits.
-We operate under a Zero-Knowledge Architecture: What you play, when you play it, and where you play it remains strictly between you and your device.
+1. OVERVIEW
+Audia Player is designed as a local-first Android audio player. In the version described by this policy, core library, playback, favorites, playlists, and schedule functions operate on the device without a Developer-operated account or cloud service. The App is not designed to sell or profile your listening history. The disclosures below must match the actual App build, including any third-party software components.
 
-2. INFORMATION COLLECTION AND USE
-We do NOT collect, transmit, or store any Personally Identifiable Information (PII) such as your name, email address, phone number, or IP address.
-A. Local Audio Data The App scans your device’s internal storage to identify audio files (MP3, WAV, AAC, etc.) for the sole purpose of displaying and playing them.
-• No Uploads: This index is created and stored locally on your device. No file names or metadata are ever sent to a server.
-B. Usage Data We do not use third-party analytics services (e.g., Google Analytics, Firebase, Mixpanel). We do not track which buttons you press or how long you use the App.
+2. INFORMATION ACCESSED AND PROCESSED ON YOUR DEVICE
+With the permissions available to it, the App may read media information such as audio file names, titles, artists, albums, durations, artwork, and file locations or identifiers to display and play local audio. It may store local preferences, favorites, playlists, listening counts, filters, and scheduled playback settings. These records are intended for on-device functionality and are stored in App-managed storage. The App does not require an account, email address, or telephone number for its core local player functions.
 
-3. APP PERMISSIONS
-To function as a precision music player and scheduler, Audia Player requires specific permissions. We request these only to perform core features:
-• Storage (Read Media/Audio): Required to access the music files stored on your device so you can create playlists.
-• Foreground Service: Required to keep the "Precision Scheduler" and audio playback active when the screen is off or you are using other apps.
-• Schedule Exact Alarm: Required to ensure your scheduled music starts at the exact second you requested, overriding standard battery-saving delays.
-• Notifications: Used solely to display the playback controls (Play/Pause/Skip) in your status bar.
+3. DATA SENT TO THE DEVELOPER
+The local-player version described here does not intentionally upload your audio files, file paths, playlists, listening history, or schedule details to a Developer-operated server. It is not configured to use Developer-operated user analytics, advertising networks, or remote crash-report collection. This statement applies only after verification of the released App and all included third-party libraries. Android, your device manufacturer, the app store, and any enabled device backup service may independently process device or diagnostic information under their own policies.
 
-4. DATA STORAGE AND RETENTION
-All data is local.
-• Databases: Your Favorites, Playlists, Play Counts, and Schedule configurations are stored in a private database on your device's internal memory.
-• Deletion: If you uninstall Audia Player, this database is permanently deleted by the Android System. We cannot recover this data for you because we do not have a copy of it.
+4. PERMISSIONS AND PURPOSES
+The App may request or use the following, as applicable to your Android version and selected features:
+• Music/audio access: discover and play audio available on the device.
+• Foreground media playback: continue eligible audio playback while the App is in the background and display playback controls.
+• Notifications: show playback-related controls and notices when supported and permitted by the system.
+• Alarms and reminders special access: attempt to trigger user-configured scheduled playback at requested times; Android may require separate approval.
+• Device startup or wake-related access: only if implemented, to restore eligible scheduling behavior after a restart or during sleep.
+Permissions may be denied or changed in Android Settings. Denial can limit the related feature. The App should not request access unrelated to an enabled feature.
 
-5. ADVERTISING AND TRACKING
-• No Ads: This App does not display third-party advertisements.
-• No Trackers: This App does not contain any advertising IDs (AAID) or tracking pixels.
+5. LOCAL STORAGE, BACKUP, AND DELETION
+Preferences, playlists, favorites, listening counts, and scheduling configurations are normally stored in the App's local storage. Clearing App data or uninstalling the App usually removes its local private data from that device. However, Android or device-manufacturer backup and transfer systems may preserve or restore certain App data, depending on your settings and the App's backup configuration. The Developer does not have a server-side copy of the local library in the version covered by this policy. Original audio files stored outside the App remain under your control and are not ordinarily deleted by uninstalling Audia Player.
 
-6. CHILDREN’S PRIVACY
-Since Audia Player does not collect personal data, it is safe for use by children. We do not knowingly collect or solicit any information from anyone under the age of 13.
+6. SECURITY
+The App relies on Android application isolation and platform permission controls for access to locally stored data. No software or device can be guaranteed completely secure against loss, unauthorized access, malware, or hardware failure. Protect your device with a secure screen lock and keep important audio and settings backed up through a method you trust.
 
-7. INTERNATIONAL DATA TRANSFERS
-Since the App operates offline and does not transmit data to the cloud, your data remains subject to the laws of your local jurisdiction and is never transferred across international borders by the App.
+7. ADVERTISING, ANALYTICS, AND THIRD-PARTY SERVICES
+The local-player version described here does not intentionally show third-party advertisements or include a Developer-operated behavioral analytics service. If a future update introduces Firebase, Crashlytics, online lyrics, music identification, streaming, social functions, cloud sync, or any other online service, this policy and any required in-App disclosures or consent mechanisms must be updated BEFORE enabling that functionality. Information sent to external providers and their retention practices will be described at that time.
 
-8. SECURITY
-We rely on the security features of your device’s operating system to protect your local data. Because we do not store your data on external servers, your data is immune to cloud-based data breaches involving our App.
+8. CHILDREN
+The App is a general-purpose local audio player and is not specifically designed or marketed to children. The Developer does not knowingly solicit children's personal information through a registration system. Parents or guardians should manage device permissions and the content available to children. Any distribution specifically directed at children will be reviewed for additional applicable legal and store requirements.
 
-9. CHANGES TO THIS POLICY
-We may update our Privacy Policy from time to time to reflect changes in legal regulations or App features. We will notify you of any changes by posting the new Privacy Policy within the App’s "About" section.
+9. YOUR CHOICES AND CONTROL
+You can manage the App's media and notification permissions in Android Settings, review or remove locally stored playlists and schedules where the App supports this, clear App storage, or uninstall the App. These actions may remove local preferences or stop related functions. For questions about privacy or data handling, contact the address below.
 
-10. CONTACT US
-If you have any questions or suggestions about our Privacy Policy, do not hesitate to contact the Developer:
-Developer: Tanjil Hasan Himel Email: taanjilhasan@gmail.com
-________________________________________
-© 2026 Tanjil Hasan Himel. All Rights Reserved.
+10. POLICY CHANGES
+This policy may be updated to reflect actual App behavior, new features, software dependencies, or legal requirements. The effective date above will be changed when a revised policy is published. Where appropriate, significant changes will be communicated in the App or release notes before the new data processing begins.
+
+11. CONTACT
+Tanjil Hasan Himel
+Email: taanjilhasan@gmail.com
+GitHub: https://github.com/TanjilHasan-Himel
+
+© 2026 Tanjil Hasan Himel. All rights reserved.
 """
 }

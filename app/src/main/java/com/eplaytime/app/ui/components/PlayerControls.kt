@@ -1,198 +1,202 @@
 package com.eplaytime.app.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Forward5
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay5
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import com.eplaytime.app.ui.theme.SoftGold
-import com.eplaytime.app.ui.theme.SoftGoldDark
-import com.eplaytime.app.ui.theme.TextTertiary
-
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.animation.core.Spring
+import androidx.media3.common.Player
 
 /**
- * Rich Player Controls with Haptics and Animations
+ * Modern Clean Primary Player Controls (The Sacred 1 Row)
+ * [Shuffle]  [Previous]  [Play/Pause (68dp circle)]  [Next]  [Repeat]
+ *
+ * Spotify & SimpMusic architecture: 5 clean buttons, zero squishing, dynamic accent glow.
  */
 @Composable
 fun PlayerControls(
     isPlaying: Boolean,
+    shuffleEnabled: Boolean,
+    repeatMode: Int,
+    accentColor: Color,
     onPlayPause: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onSeekForward: () -> Unit,
-    onSeekBackward: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
 
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Previous
-        val prevInteractionSource = remember { MutableInteractionSource() }
-        val prevIsPressed by prevInteractionSource.collectIsPressedAsState()
-        val prevScale by animateFloatAsState(
-            targetValue = if (prevIsPressed) 0.75f else 1f,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+        // 1. Shuffle
+        val shuffleInteraction = remember { MutableInteractionSource() }
+        val shufflePressed by shuffleInteraction.collectIsPressedAsState()
+        val shuffleScale by animateFloatAsState(
+            targetValue = if (shufflePressed) 0.8f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+            label = "shuffle_scale"
         )
         IconButton(
-            onClick = { 
+            onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onPrevious() 
+                onToggleShuffle()
             },
-            interactionSource = prevInteractionSource,
-            modifier = Modifier.size(56.dp).scale(prevScale)
+            interactionSource = shuffleInteraction,
+            modifier = Modifier.size(44.dp).scale(shuffleScale)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Shuffle,
+                contentDescription = "Shuffle",
+                tint = if (shuffleEnabled) accentColor else Color.White.copy(alpha = 0.55f),
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        // 2. Previous Track
+        val prevInteraction = remember { MutableInteractionSource() }
+        val prevPressed by prevInteraction.collectIsPressedAsState()
+        val prevScale by animateFloatAsState(
+            targetValue = if (prevPressed) 0.8f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+            label = "prev_scale"
+        )
+        IconButton(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onPrevious()
+            },
+            interactionSource = prevInteraction,
+            modifier = Modifier.size(52.dp).scale(prevScale)
         ) {
             Icon(
                 imageVector = Icons.Default.SkipPrevious,
                 contentDescription = "Previous",
                 tint = Color.White,
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(34.dp)
             )
         }
 
-        // Rewind 5s
-        val rwInteractionSource = remember { MutableInteractionSource() }
-        val rwIsPressed by rwInteractionSource.collectIsPressedAsState()
-        val rwScale by animateFloatAsState(
-            targetValue = if (rwIsPressed) 0.75f else 1f,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
-        )
-        IconButton(
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onSeekBackward()
-            },
-            interactionSource = rwInteractionSource,
-            modifier = Modifier.size(40.dp).scale(rwScale)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Replay5,
-                contentDescription = "Rewind 5s",
-                tint = TextTertiary,
-                modifier = Modifier.size(28.dp)
-            )
-        }
-
-        // Play/Pause (Large, Round, Soft edges)
-        val playInteractionSource = remember { MutableInteractionSource() }
-        val playIsPressed by playInteractionSource.collectIsPressedAsState()
+        // 3. Play / Pause (The Hero Button: 68dp Perfect Circle, Elevated, High-Contrast)
+        val playInteraction = remember { MutableInteractionSource() }
+        val playPressed by playInteraction.collectIsPressedAsState()
         val playScale by animateFloatAsState(
-            targetValue = if (playIsPressed) 0.85f else 1f,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+            targetValue = if (playPressed) 0.88f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+            label = "play_scale"
         )
         Box(
             modifier = Modifier
-                .size(80.dp)
+                .size(68.dp)
                 .scale(playScale)
+                .shadow(16.dp, CircleShape, spotColor = accentColor.copy(alpha = 0.55f))
                 .clip(CircleShape)
                 .background(
-                    Brush.linearGradient(
-                        colors = listOf(SoftGold, SoftGoldDark)
+                    Brush.radialGradient(
+                        colors = listOf(
+                            accentColor,
+                            accentColor.copy(alpha = 0.90f)
+                        )
                     )
                 )
                 .clickable(
-                    interactionSource = playInteractionSource,
-                    indication = androidx.compose.foundation.LocalIndication.current
-                ) { 
+                    interactionSource = playInteraction,
+                    indication = null
+                ) {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onPlayPause() 
+                    onPlayPause()
                 },
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                contentDescription = "Play/Pause",
-                tint = Color.Black,
-                modifier = Modifier.size(40.dp)
+                contentDescription = if (isPlaying) "Pause" else "Play",
+                tint = Color(0xFF0F0F10), // Maximum contrast on bright accent!
+                modifier = Modifier.size(34.dp)
             )
         }
 
-        // Forward 5s
-        val ffInteractionSource = remember { MutableInteractionSource() }
-        val ffIsPressed by ffInteractionSource.collectIsPressedAsState()
-        val ffScale by animateFloatAsState(
-            targetValue = if (ffIsPressed) 0.75f else 1f,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+        // 4. Next Track
+        val nextInteraction = remember { MutableInteractionSource() }
+        val nextPressed by nextInteraction.collectIsPressedAsState()
+        val nextScale by animateFloatAsState(
+            targetValue = if (nextPressed) 0.8f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+            label = "next_scale"
         )
         IconButton(
             onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onSeekForward()
+                onNext()
             },
-            interactionSource = ffInteractionSource,
-            modifier = Modifier.size(40.dp).scale(ffScale)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Forward5,
-                contentDescription = "Forward 5s",
-                tint = TextTertiary,
-                modifier = Modifier.size(28.dp)
-            )
-        }
-
-        // Next
-        val nextInteractionSource = remember { MutableInteractionSource() }
-        val nextIsPressed by nextInteractionSource.collectIsPressedAsState()
-        val nextScale by animateFloatAsState(
-            targetValue = if (nextIsPressed) 0.75f else 1f,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
-        )
-        IconButton(
-            onClick = { 
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onNext() 
-            },
-            interactionSource = nextInteractionSource,
-            modifier = Modifier.size(56.dp).scale(nextScale)
+            interactionSource = nextInteraction,
+            modifier = Modifier.size(52.dp).scale(nextScale)
         ) {
             Icon(
                 imageVector = Icons.Default.SkipNext,
                 contentDescription = "Next",
                 tint = Color.White,
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(34.dp)
+            )
+        }
+
+        // 5. Repeat Mode
+        val repeatInteraction = remember { MutableInteractionSource() }
+        val repeatPressed by repeatInteraction.collectIsPressedAsState()
+        val repeatScale by animateFloatAsState(
+            targetValue = if (repeatPressed) 0.8f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+            label = "repeat_scale"
+        )
+        IconButton(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onCycleRepeatMode()
+            },
+            interactionSource = repeatInteraction,
+            modifier = Modifier.size(44.dp).scale(repeatScale)
+        ) {
+            val repeatIcon = if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat
+            val isRepeatActive = repeatMode != Player.REPEAT_MODE_OFF
+            Icon(
+                imageVector = repeatIcon,
+                contentDescription = "Repeat",
+                tint = if (isRepeatActive) accentColor else Color.White.copy(alpha = 0.55f),
+                modifier = Modifier.size(24.dp)
             )
         }
     }
 }
 
+/**
+ * Spotify-Style Heart / Favorite Button
+ */
 @Composable
 fun FavoriteButton(
     isFavorite: Boolean,
@@ -200,15 +204,15 @@ fun FavoriteButton(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
-    
+
     val scale by animateFloatAsState(
-        targetValue = if (isFavorite) 1.3f else 1.0f,
-        animationSpec = spring(dampingRatio = 0.4f, stiffness = 600f), // Bouncy spring
+        targetValue = if (isFavorite) 1.25f else 1.0f,
+        animationSpec = spring(dampingRatio = 0.45f, stiffness = 600f),
         label = "heart_bounce"
     )
 
     val color by animateColorAsState(
-        targetValue = if (isFavorite) Color.Red else TextTertiary,
+        targetValue = if (isFavorite) Color(0xFFFF2D55) else Color.White.copy(alpha = 0.60f),
         label = "heart_color"
     )
 
@@ -217,12 +221,13 @@ fun FavoriteButton(
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onToggle()
         },
-        modifier = modifier.scale(if (isFavorite) scale else 1.0f) // Only scale up on favorite
+        modifier = modifier.scale(if (isFavorite) scale else 1.0f)
     ) {
         Icon(
             imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
             contentDescription = "Favorite",
-            tint = color
+            tint = color,
+            modifier = Modifier.size(26.dp)
         )
     }
 }

@@ -12,12 +12,24 @@ import com.eplaytime.app.data.model.Song
 /**
  * PlayTime Room Database
  */
-@Database(entities = [ScheduledTask::class, FavoriteSong::class, Song::class], version = 6, exportSchema = false)
+@Database(
+    entities = [
+        ScheduledTask::class,
+        FavoriteSong::class,
+        Song::class,
+        LyricsEntity::class,
+        SongWikiEntity::class
+    ],
+    version = 8,
+    exportSchema = false
+)
 abstract class PlayTimeDatabase : RoomDatabase() {
 
     abstract fun scheduledTaskDao(): ScheduledTaskDao
     abstract fun favoritesDAO(): FavoritesDAO
     abstract fun songDao(): SongDao
+    abstract fun lyricsDao(): LyricsDao
+    abstract fun songWikiDao(): SongWikiDao
 
     companion object {
         @Volatile

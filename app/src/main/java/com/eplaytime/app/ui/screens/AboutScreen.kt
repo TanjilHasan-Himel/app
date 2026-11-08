@@ -1,36 +1,37 @@
 package com.eplaytime.app.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.eplaytime.app.BuildConfig
-import com.eplaytime.app.R
-import com.eplaytime.app.ui.theme.BlackBackground
-import com.eplaytime.app.ui.theme.OutfitFontFamily
-import com.eplaytime.app.ui.theme.SoftGold
-import com.eplaytime.app.ui.theme.TextPrimary
-import com.eplaytime.app.ui.theme.TextSecondary
-import coil.compose.AsyncImage
-import java.util.Calendar
-import com.eplaytime.app.util.Legals
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.border
+import coil.compose.AsyncImage
+import com.eplaytime.app.BuildConfig
+import com.eplaytime.app.R
+import com.eplaytime.app.ui.theme.*
+import com.eplaytime.app.util.Legals
+import java.util.Calendar
 
 /**
  * AboutScreen - Professional app information and credits
@@ -41,9 +42,10 @@ import androidx.compose.foundation.border
 fun AboutScreen(
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val currentYear = Calendar.getInstance().get(Calendar.YEAR)
     val versionName = BuildConfig.VERSION_NAME ?: "1.0.0"
-    val releaseDate = "July 3, 2026"
+    val releaseDate = "November 8, 2026"
     
     // State for Legal Dialogs
     var showEula by remember { mutableStateOf(false) }
@@ -152,6 +154,35 @@ fun AboutScreen(
                     fontSize = 18.sp,
                     color = TextPrimary
                 )
+
+                // Developer GitHub Profile Link
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .border(1.dp, SoftGold.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                        .clickable {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/TanjilHasan-Himel"))
+                            context.startActivity(intent)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Code,
+                        contentDescription = "GitHub",
+                        tint = SoftGold,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "github.com/TanjilHasan-Himel",
+                        fontFamily = OutfitFontFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
+                        color = SoftGold
+                    )
+                }
             }
 
             HorizontalDivider(

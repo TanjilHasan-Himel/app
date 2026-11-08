@@ -108,7 +108,7 @@ class EngagementWorker @AssistedInject constructor(
         )
 
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.icon)
+            .setSmallIcon(R.drawable.ic_audia_notification)
             .setContentTitle("Audia Player")
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))

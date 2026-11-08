@@ -40,8 +40,8 @@ fun AuraVisualizer(
     Canvas(modifier = modifier.fillMaxSize()) {
         val cx = size.width / 2
         val cy = size.height / 2
-        val coreRadius = min(cx, cy) * 0.5f // Draw closer to the center so spikes peak out nicely
-        val maxSpike = min(cx, cy) // Spikes can go all the way to the edge of the screen
+        val coreRadius = min(cx, cy) * 0.65f // Starts right along the perimeter of the squircle artwork card
+        val maxSpike = min(cx, cy) * 0.32f
 
         val points = waveform
         
@@ -49,22 +49,22 @@ fun AuraVisualizer(
             // Idle State: Gentle glowing dots breathing in a circle
             for (i in 0 until 48) {
                 val angle = (i.toFloat() / 48) * 2 * Math.PI + idlePhase
-                val offset = sin(angle * 4 + idlePhase).toFloat() * 10f
+                val offset = sin(angle * 4 + idlePhase).toFloat() * 6f
                 
                 val r = coreRadius + offset
                 val x = cx + cos(angle).toFloat() * r
                 val y = cy + sin(angle).toFloat() * r
                 
                 drawCircle(
-                    color = primaryColor.copy(alpha = 0.2f),
-                    radius = 8f,
+                    color = primaryColor.copy(alpha = 0.25f),
+                    radius = 5f,
                     center = Offset(x, y)
                 )
             }
             return@Canvas
         }
 
-        // Active State: Neon Aura Ambient Blobs/Spikes
+        // Active State: Neon Aura Ambient Spikes radiating symmetrically around artwork
         val bandCount = 48.coerceAtMost(points.size) // 48 points around the circle
         val sampleStep = points.size / bandCount.toFloat()
 
@@ -74,13 +74,11 @@ fun AuraVisualizer(
             
             // Smooth 360 circle
             val angle = (i.toFloat() / bandCount) * 2 * Math.PI + idlePhase
+            val value = baseAmplitude.coerceIn(0f, 1f)
             
-            val value = Math.abs(baseAmplitude) * 2f 
-            
-            // Make spikes shoot further out
-            val spikeHeight = (value * maxSpike * 2f).coerceAtMost(maxSpike * 1.5f)
+            val spikeHeight = (value * maxSpike).coerceIn(6f, maxSpike)
 
-            val startR = coreRadius - 20f
+            val startR = coreRadius - 4f
             val endR = coreRadius + spikeHeight
             
             val cosA = cos(angle).toFloat()
@@ -89,12 +87,20 @@ fun AuraVisualizer(
             val start = Offset(cx + cosA * startR, cy + sinA * startR)
             val end = Offset(cx + cosA * endR, cy + sinA * endR)
             
-            // Draw thick, soft gradient-like spikes that blend well when blurred
+            // 1. Soft Outer Neon Glow
             drawLine(
-                color = primaryColor.copy(alpha = 0.3f + (value).coerceAtMost(0.7f)),
+                color = primaryColor.copy(alpha = (0.25f + value * 0.55f).coerceIn(0.15f, 0.80f)),
                 start = start,
                 end = end,
-                strokeWidth = 24f, // Massively thick bars for maximum blur ambient volume
+                strokeWidth = 16f,
+                cap = StrokeCap.Round
+            )
+            // 2. Crisp Core Light
+            drawLine(
+                color = Color.White.copy(alpha = (0.35f + value * 0.60f).coerceIn(0.20f, 0.95f)),
+                start = start,
+                end = end,
+                strokeWidth = 5f,
                 cap = StrokeCap.Round
             )
         }

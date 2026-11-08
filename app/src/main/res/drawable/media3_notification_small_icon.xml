@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <!-- Audia Triple Arch Brand Mark -->
+    <path
+        android:pathData="M68,405 L214,117 Q256,35 298,117 L444,405"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="38"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M145,405 L226,242 Q256,182 286,242 L367,405"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="38"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M222,405 L244,358 Q256,334 268,358 L290,405"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="38"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
+

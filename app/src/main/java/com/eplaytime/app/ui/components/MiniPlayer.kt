@@ -23,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -71,29 +73,85 @@ fun MiniPlayer(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
+            val infiniteTransition = rememberInfiniteTransition(label = "liquid_glass")
+            val shimmerPhase by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 4000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "shimmer_phase"
+            )
+            val liquidGlowAlpha by infiniteTransition.animateFloat(
+                initialValue = 0.25f,
+                targetValue = 0.55f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 2000, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "liquid_glow"
+            )
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(72.dp)
             ) {
-                // Glass Background
+                // Liquid Frosted Glass Pill
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(BlackSurface.copy(alpha = 0.8f)) // Less opaque for glass effect
-                        .blur(15.dp) // Blur effect
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    SoftGold.copy(alpha = 0.3f),
-                                    Color.Transparent
-                                )
-                            ),
-                            shape = RoundedCornerShape(20.dp)
+                        .shadow(
+                            elevation = 16.dp,
+                            shape = RoundedCornerShape(22.dp),
+                            spotColor = SoftGold.copy(alpha = liquidGlowAlpha * 0.4f),
+                            ambientColor = Color.Black.copy(alpha = 0.6f)
                         )
-                )
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xFF16161E).copy(alpha = 0.88f),
+                                    Color(0xFF0C0C12).copy(alpha = 0.94f)
+                                )
+                            )
+                        )
+                        .border(
+                            width = 1.2.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.25f),
+                                    SoftGold.copy(alpha = 0.7f),
+                                    Color.White.copy(alpha = 0.35f),
+                                    SoftGold.copy(alpha = 0.15f),
+                                    Color.White.copy(alpha = 0.2f)
+                                ),
+                                start = Offset(shimmerPhase * 800f - 200f, 0f),
+                                end = Offset(shimmerPhase * 800f + 400f, 200f)
+                            ),
+                            shape = RoundedCornerShape(22.dp)
+                        )
+                ) {
+                    // Fluid Specular Liquid Sheen Sweep
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color.White.copy(alpha = 0.04f),
+                                        SoftGold.copy(alpha = 0.10f),
+                                        Color.White.copy(alpha = 0.06f),
+                                        Color.Transparent
+                                    ),
+                                    start = Offset(shimmerPhase * 1200f - 400f, 0f),
+                                    end = Offset(shimmerPhase * 1200f + 200f, 220f)
+                                )
+                            )
+                    )
+                }
 
                 // Content
                 Row(

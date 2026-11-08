@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -212,6 +213,8 @@ private fun QueueItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -226,14 +229,14 @@ private fun QueueItem(
                 }
             )
             .clickable(onClick = onClick)
-            .padding(12.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
             model = song.albumArtUri ?: R.drawable.audia_player_logo,
             contentDescription = "Album Art",
             modifier = Modifier
-                .size(48.dp)
+                .size(44.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(BlackCard),
             contentScale = ContentScale.Crop
@@ -262,45 +265,74 @@ private fun QueueItem(
             )
         }
 
+        Spacer(modifier = Modifier.width(8.dp))
+
         Text(
             text = formatDuration(song.duration),
             fontFamily = OutfitFontFamily,
             fontWeight = FontWeight.Light,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             color = TextTertiary
         )
 
-        Spacer(modifier = Modifier.width(8.dp))
-
         if (onRemove != null && !isCurrentlyPlaying) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { onPlayNext?.invoke() }) {
-                    Text("Next", fontFamily = OutfitFontFamily, fontSize = 10.sp, color = SoftGold)
-                }
-                TextButton(onClick = { onPlayLater?.invoke() }) {
-                    Text("Later", fontFamily = OutfitFontFamily, fontSize = 10.sp, color = TextSecondary)
-                }
-                
-                // Delete
+            Box {
                 IconButton(
-                    onClick = onRemove,
-                    modifier = Modifier.size(24.dp)
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Remove",
-                        tint = TextSecondary
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Song options",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-                
-                // Drag Handle
-                Icon(
-                    imageVector = Icons.Default.DragHandle,
-                    contentDescription = "Drag to reorder",
-                    tint = TextSecondary,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(BlackSurface)
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text("Play Next", fontFamily = OutfitFontFamily, fontSize = 13.sp, color = TextPrimary)
+                        },
+                        onClick = {
+                            showMenu = false
+                            onPlayNext?.invoke()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text("Play Later", fontFamily = OutfitFontFamily, fontSize = 13.sp, color = TextPrimary)
+                        },
+                        onClick = {
+                            showMenu = false
+                            onPlayLater?.invoke()
+                        }
+                    )
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                    DropdownMenuItem(
+                        text = {
+                            Text("Remove from Queue", fontFamily = OutfitFontFamily, fontSize = 13.sp, color = Color.Red.copy(alpha = 0.85f))
+                        },
+                        onClick = {
+                            showMenu = false
+                            onRemove.invoke()
+                        }
+                    )
+                }
             }
+
+            Icon(
+                imageVector = Icons.Default.DragHandle,
+                contentDescription = "Drag to reorder",
+                tint = TextSecondary.copy(alpha = 0.7f),
+                modifier = Modifier
+                    .size(24.dp)
+                    .padding(start = 2.dp)
+            )
         }
     }
 }

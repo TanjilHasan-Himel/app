@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.eplaytime.app.R
+import com.eplaytime.app.ui.theme.*
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -93,9 +94,9 @@ fun OnboardingScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF0F2027),
-                        Color(0xFF203A43),
-                        Color(0xFF2C5364)
+                        Color(0xFF16130B),
+                        BlackBackground,
+                        Color.Black
                     )
                 )
             )
@@ -126,8 +127,8 @@ fun OnboardingScreen(
                             .size(if (pagerState.currentPage == index) 10.dp else 8.dp)
                             .clip(CircleShape)
                             .background(
-                                if (pagerState.currentPage == index) Color.White
-                                else Color.White.copy(alpha = 0.3f)
+                                if (pagerState.currentPage == index) SoftGold
+                                else Color.White.copy(alpha = 0.25f)
                             )
                     )
                 }
@@ -141,7 +142,7 @@ fun OnboardingScreen(
                             pagerState.animateScrollToPage(pagerState.currentPage + 1)
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    colors = ButtonDefaults.buttonColors(containerColor = SoftGold, contentColor = Color.Black),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text("Next", color = Color.Black, fontWeight = FontWeight.Bold)
@@ -149,7 +150,7 @@ fun OnboardingScreen(
             } else {
                 Button(
                     onClick = { onComplete(if (name.isBlank()) "Friend" else name) },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    colors = ButtonDefaults.buttonColors(containerColor = SoftGold, contentColor = Color.Black),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text("Start Using", color = Color.Black, fontWeight = FontWeight.Bold)
@@ -174,19 +175,19 @@ private fun WelcomeNameStep(name: String, onNameChange: (String) -> Unit) {
             modifier = Modifier
                 .size(92.dp)
                 .clip(CircleShape)
-                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                .border(2.dp, SoftGold.copy(alpha = 0.35f), CircleShape)
         )
         Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = "Welcome to Audia Player",
-            style = MaterialTheme.typography.headlineMedium,
+            fontFamily = OutfitFontFamily, fontSize = 24.sp,
             color = Color.White,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "Let's personalize your experience. What should we call you?",
-            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = OutfitFontFamily, fontSize = 14.sp,
             color = Color.White.copy(alpha = 0.7f),
             textAlign = TextAlign.Center
         )
@@ -198,7 +199,7 @@ private fun WelcomeNameStep(name: String, onNameChange: (String) -> Unit) {
                 .height(56.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White.copy(alpha = 0.1f))
-                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                .border(1.dp, SoftGold.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
                 .padding(horizontal = 16.dp),
             contentAlignment = Alignment.CenterStart
         ) {
@@ -231,7 +232,7 @@ private fun FeaturesStep() {
     ) {
         Text(
             text = "Premium Features",
-            style = MaterialTheme.typography.headlineMedium,
+            fontFamily = OutfitFontFamily, fontSize = 24.sp,
             color = Color.White,
             fontWeight = FontWeight.Bold
         )
@@ -247,7 +248,7 @@ private fun FeaturesStep() {
 @Composable
 private fun FeatureItem(icon: ImageVector, title: String, desc: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+        Icon(icon, null, tint = SoftGold, modifier = Modifier.size(40.dp))
         Spacer(modifier = Modifier.width(16.dp))
         Column {
             Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -365,12 +366,12 @@ private fun PermissionsStep(name: String, onComplete: (String) -> Unit) {
             modifier = Modifier
                 .size(88.dp)
                 .clip(CircleShape)
-                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                .border(2.dp, SoftGold.copy(alpha = 0.35f), CircleShape)
         )
         Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = if (allGranted) "You’re ready, ${if (name.isBlank()) "Friend" else name}!" else title,
-            style = MaterialTheme.typography.headlineSmall,
+            fontFamily = OutfitFontFamily, fontSize = 20.sp,
             color = Color.White,
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold
@@ -378,7 +379,7 @@ private fun PermissionsStep(name: String, onComplete: (String) -> Unit) {
         Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = description,
-            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = OutfitFontFamily, fontSize = 14.sp,
             color = Color.White.copy(alpha = 0.75f),
             textAlign = TextAlign.Center
         )
@@ -386,7 +387,7 @@ private fun PermissionsStep(name: String, onComplete: (String) -> Unit) {
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+            colors = CardDefaults.cardColors(containerColor = BlackSurface.copy(alpha = 0.8f)),
             shape = RoundedCornerShape(20.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -401,7 +402,7 @@ private fun PermissionsStep(name: String, onComplete: (String) -> Unit) {
 
         Button(
             onClick = buttonAction,
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+            colors = ButtonDefaults.buttonColors(containerColor = SoftGold, contentColor = Color.Black),
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth()
         ) {

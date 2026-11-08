@@ -117,7 +117,15 @@ fun SongList(
 
             items(items = songs, key = { it.id }, contentType = { "song" }) { song ->
                 val itemModifier = Modifier.graphicsLayer {
-                    val itemInfo = state.layoutInfo.visibleItemsInfo.find { it.key == song.id }
+                    val visibleItems = state.layoutInfo.visibleItemsInfo
+                    var itemInfo: androidx.compose.foundation.lazy.LazyListItemInfo? = null
+                    for (i in 0 until visibleItems.size) {
+                        val info = visibleItems[i]
+                        if (info.key == song.id) {
+                            itemInfo = info
+                            break
+                        }
+                    }
                     if (itemInfo != null) {
                         val viewportHeight = state.layoutInfo.viewportSize.height
                         val itemCenter = itemInfo.offset + (itemInfo.size / 2)
@@ -151,12 +159,6 @@ fun SongList(
                 )
             }
         }
-        
-        // Custom Fast Scrollbar
-        VerticalFastScroller(
-            listState = state,
-            modifier = Modifier.align(Alignment.CenterEnd)
-        )
     }
 }
 
