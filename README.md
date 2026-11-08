@@ -28,32 +28,38 @@
 ## ✨ Key Features
 
 ### 🎨 Fluid Stage & Dynamic Visuals
+
 - **Dynamic Ambient Bloom:** Album-art reactive fluid ambient lighting that dances with playback.
 - **Real-Time FFT Visualizer:** Audio-frequency reactive lighting powered by native FFT bass and energy analysis.
 - **Custom Arch Morph Button:** Distinctive Arch Play/Pause button that smoothly morphs into a circle during active playback.
 - **Adaptive Multi-Screen Layout:** Responsive layout architecture that scales gracefully across compact screens (16:9, 18:9), modern tall aspect ratios, foldable devices, and 3-button navigation.
 
 ### 📜 Real-Time Synced Lyrics
+
 - **LRCLIB Integration:** Ultra-fast, millisecond-accurate synchronized karaoke lyrics.
 - **Zero-Shift 48dp Slot:** Deterministic lyrics preview stage prevents layout jumping between loading, synced lines, and instrumental breaks.
 - **Immersive Lyrics Stage:** Tap-to-expand edge-to-edge full lyrics mode with auto-scroll and manual seek synchronization.
 - **Offline Cache:** Powered by Room Database for instant offline lyrics retrieval.
 
 ### 🔁 Precision A-B Looper
+
 - **Musician-Grade Looping:** Set millisecond-precise loop points (A → B) on any track.
 - **Named Loop Presets:** Save, name, and recall custom loop sections (choruses, guitar solos, dance routines) permanently in local storage.
 
 ### 🛠️ Song Garage & Audio Inspector
+
 - **Lossless Quality Badge:** Automatic detection and badge display for FLAC, Hi-Res 24-bit/96kHz, WAV, AAC, and MP3.
 - **Audio Inspector:** View bitrate, sample rate, bit depth, channel configuration, and container specs.
 - **Built-in Audio Trimmer & Tag Editor:** Edit ID3 tags, album art, and trim audio segments on-device.
 
 ### 🎚️ Sound Processing & Effects
+
 - **10-Band Graphic Equalizer** with genre presets and custom curve saving.
 - **Bass Boost & Virtualizer:** Deep low-end acoustic amplification.
 - **Loudness Enhancer:** Crisp acoustic clarity.
 
 ### 🌙 Zen Bedtime Mode & Smart Sleep
+
 - **Zen Ambient View:** Distraction-free, minimal night listening screen.
 - **Smart Sleep Timer:** Gentle audio volume fade-out with optional "Stop after current track" toggle.
 
@@ -74,11 +80,13 @@
 ## 🚀 Building from Source
 
 ### Prerequisites
+
 - Android Studio Ladybug / Meerkat (or newer)
 - JDK 17 or higher
 - Android SDK 35 (compileSdk: 35, minSdk: 26)
 
 ### Steps
+
 1. Clone the repository:
    ```bash
    git clone https://github.com/TanjilHasan-Himel/playtime-musicapp.git
