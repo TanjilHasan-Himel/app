@@ -79,3 +79,4 @@ IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGE
 For professional inquiries, licensing questions, or security reports, please reach out via:
 - **Developer Website:** [tanjilhasanhimel.me](https://tanjilhasanhimel.me/)
 - **LinkedIn:** [linkedin.com/in/tanjilhasanhimel](https://www.linkedin.com/in/tanjilhasanhimel/)
+
