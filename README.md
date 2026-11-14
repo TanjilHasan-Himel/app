@@ -42,7 +42,30 @@ From high-resolution 24-bit/192kHz FLAC playback to millisecond-synchronized lyr
 
 ---
 
-## 📱 Visual Showcase
+## 🚀 The Architecture Evolution: Previous vs. New (Main Show)
+
+Audia's signature design revolution: transitioning from a monolithic bottom deck into a decoupled, physics-driven **4-Piece Floating Liquid Glass Island**:
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="50%">
+        <strong>🕰️ PREVIOUS (Legacy Architecture - v9.0)</strong><br>
+        <em>Monolithic Solid Bottom Bar &bull; Linear Seekbar &bull; Fixed Dock</em><br><br>
+        <img src="assets/screenshots/previous_player.png" alt="Previous Player Architecture" width="280">
+      </td>
+      <td align="center" width="50%">
+        <strong>✨ NEW (Modular Liquid Glass - v9.1) — MAIN SHOW ⭐️</strong><br>
+        <em>4-Piece Floating Island &bull; In-Button Liquid Theme Fill &bull; Travelling Light Beam</em><br><br>
+        <img src="assets/screenshots/home_screen.png" alt="New Modular 4-Piece Liquid Glass MiniPlayer" width="280">
+      </td>
+    </tr>
+  </table>
+</div>
+
+---
+
+## 📱 Complete Interface Showcase
 
 <div align="center">
   <table>
