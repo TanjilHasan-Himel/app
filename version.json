@@ -1,0 +1,8 @@
+{
+  "versionCode": 92,
+  "versionName": "9.1.1",
+  "releaseTitle": "Audia v9.1.1 — Persistent Playlists, M3U Engine & In-App Updates",
+  "releaseNotes": "• Persistent Playlists & M3U/M3U8 Export/Import (Phase L2)\n• Android Auto Media Hierarchy Browsing (Phase A1)\n• In-App Automatic Update Checker & 2-Day Gentle Reminders\n• Network Security & Proactive Audio Session ID Hardening",
+  "downloadUrl": "https://github.com/TanjilHasan-Himel/app/releases/latest/download/Audia-latest.apk",
+  "releaseUrl": "https://github.com/TanjilHasan-Himel/app/releases/latest"
+}
