@@ -2,15 +2,8 @@ name: Audia CI/CD - Build & Release
 
 on:
   push:
-    branches:
-      - main
-      - master
     tags:
       - 'v*'
-  pull_request:
-    branches:
-      - main
-      - master
   workflow_dispatch:
     inputs:
       build_release:
@@ -22,7 +15,7 @@ on:
         description: 'Create/Update GitHub Release with APKs?'
         required: true
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: write
