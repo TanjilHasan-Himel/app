@@ -52,6 +52,15 @@ interface PlaylistDao {
     @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId AND id = :itemId")
     suspend fun deleteItemById(playlistId: Long, itemId: Long)
 
+    @Query("UPDATE playlist_items SET position = position - 1 WHERE playlistId = :playlistId AND position > :deletedPosition")
+    suspend fun decrementPositionsAfter(playlistId: Long, deletedPosition: Int)
+
+    @Transaction
+    suspend fun removeItemAndShift(playlistId: Long, itemId: Long, position: Int) {
+        deleteItemById(playlistId, itemId)
+        decrementPositionsAfter(playlistId, position)
+    }
+
     @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId")
     suspend fun clearPlaylist(playlistId: Long)
 

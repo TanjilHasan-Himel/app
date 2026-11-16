@@ -15,6 +15,23 @@ object M3uHelper {
         val uriOrPath: String
     )
 
+    private fun sanitizeLine(text: String): String =
+        text.replace("\r", "").replace("\n", " ").trim()
+
+    /**
+     * Checks if a path or URI attempts to access internal app private directories or path traversal.
+     */
+    fun isSafePathOrUri(uriOrPath: String): Boolean {
+        val lower = uriOrPath.lowercase()
+        if (lower.contains("/data/data/") || lower.startsWith("file:///data/") || lower.startsWith("/data/")) {
+            return false
+        }
+        if (lower.contains("../") || lower.contains("..\\")) {
+            return false
+        }
+        return true
+    }
+
     /**
      * Parses an M3U or M3U8 string into structured M3uEntry objects.
      */
@@ -34,28 +51,34 @@ object M3uHelper {
                 val commaIndex = info.indexOf(',')
                 if (commaIndex != -1) {
                     val durationStr = info.substring(0, commaIndex).trim()
-                    currentDuration = durationStr.toLongOrNull() ?: -1L
+                    // Support both integer and decimal durations (e.g. 203.45)
+                    currentDuration = durationStr.toDoubleOrNull()?.toLong() ?: -1L
                     val metadata = info.substring(commaIndex + 1).trim()
                     if (metadata.contains(" - ")) {
                         val parts = metadata.split(" - ", limit = 2)
-                        currentArtist = parts[0].trim()
-                        currentTitle = parts[1].trim()
+                        currentArtist = sanitizeLine(parts[0])
+                        currentTitle = sanitizeLine(parts[1])
                     } else {
-                        currentTitle = metadata
+                        currentTitle = sanitizeLine(metadata)
                         currentArtist = ""
                     }
                 }
             } else if (!line.startsWith("#")) {
+                // Security check: Ignore prohibited private app paths or directory traversal
+                if (!isSafePathOrUri(line)) {
+                    continue
+                }
+
                 // Audio path or content URI
                 val entryTitle = currentTitle.ifBlank {
-                    line.substringAfterLast('/').substringBeforeLast('.')
+                    line.substringAfterLast('/').substringAfterLast('\\').substringBeforeLast('.')
                 }
                 entries.add(
                     M3uEntry(
-                        title = entryTitle,
-                        artist = currentArtist,
+                        title = sanitizeLine(entryTitle),
+                        artist = sanitizeLine(currentArtist),
                         durationSeconds = currentDuration,
-                        uriOrPath = line
+                        uriOrPath = sanitizeLine(line)
                     )
                 )
                 // Reset temporary fields
@@ -68,19 +91,21 @@ object M3uHelper {
     }
 
     /**
-     * Generates a valid Extended M3U playlist file content string.
+     * Generates a valid Extended M3U playlist file content string with strict CRLF sanitization.
      */
     fun generateM3u(playlistName: String, items: List<PlaylistItem>): String {
         val sb = StringBuilder()
         sb.appendLine("#EXTM3U")
-        sb.appendLine("#PLAYLIST:$playlistName")
+        sb.appendLine("#PLAYLIST:${sanitizeLine(playlistName)}")
         sb.appendLine()
 
         for (item in items) {
             val durationSec = (item.duration / 1000).coerceAtLeast(-1)
-            val artistTitle = if (item.artist.isNotBlank()) "${item.artist} - ${item.title}" else item.title
+            val title = sanitizeLine(item.title)
+            val artist = sanitizeLine(item.artist)
+            val artistTitle = if (artist.isNotBlank()) "$artist - $title" else title
             sb.appendLine("#EXTINF:$durationSec,$artistTitle")
-            sb.appendLine(item.songUri)
+            sb.appendLine(sanitizeLine(item.songUri))
         }
         return sb.toString()
     }

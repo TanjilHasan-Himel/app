@@ -10,6 +10,9 @@
         <domain includeSubdomains="true">googleapis.com</domain>
         <domain includeSubdomains="true">github.com</domain>
         <domain includeSubdomains="true">githubusercontent.com</domain>
+        <domain includeSubdomains="true">amazonaws.com</domain>
+        <domain includeSubdomains="true">fastly.net</domain>
+        <domain includeSubdomains="true">crashlytics.com</domain>
     </domain-config>
 
     <!-- Legacy HTTP streaming audio allowed only for diverse community radio stations -->

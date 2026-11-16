@@ -79,6 +79,9 @@ fun UpdateAvailableDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                val displayCurrentVersion = "v${BuildConfig.VERSION_NAME.removePrefix("v").removePrefix("V")}"
+                val displayNewVersion = "v${updateInfo.latestVersionName.removePrefix("v").removePrefix("V")}"
+
                 // Version Transition Badge
                 Row(
                     modifier = Modifier
@@ -89,7 +92,7 @@ fun UpdateAvailableDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Current: v${BuildConfig.VERSION_NAME}",
+                        text = "Current: $displayCurrentVersion",
                         fontFamily = OutfitFontFamily,
                         fontSize = 12.sp,
                         color = TextSecondary
@@ -103,7 +106,7 @@ fun UpdateAvailableDialog(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "New: ${updateInfo.latestVersionName}",
+                        text = "New: $displayNewVersion",
                         fontFamily = OutfitFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,

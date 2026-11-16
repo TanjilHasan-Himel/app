@@ -158,6 +158,7 @@ fun HomeScreen(
     val audioSessionId by viewModel.audioSessionId.collectAsState()
     val allPlaylists by viewModel.allPlaylists.collectAsState()
     val availableUpdate by viewModel.availableUpdate.collectAsState()
+    val isCheckingForUpdates by viewModel.isCheckingForUpdates.collectAsState()
 
     var activePlaylistId by rememberSaveable { mutableStateOf<Long?>(null) }
     var songForPlaylistDialog by remember { mutableStateOf<Song?>(null) }
@@ -609,9 +610,13 @@ fun HomeScreen(
                         onOpenScanFilters = { showScanFiltersSheet = true },
                         onTermsClick = onNavigateToAbout,
                         onAboutClick = onNavigateToAbout,
+                        onPrivacyClick = onNavigateToAbout,
+                        isCheckingForUpdates = isCheckingForUpdates,
                         onCheckForUpdates = {
                             viewModel.checkForAppUpdates(force = true) { update ->
-                                if (update == null || !update.isUpdateAvailable) {
+                                if (update != null && update.isUpdateAvailable) {
+                                    showSettingsDialog = false // Dismiss settings so update dialog is front-and-center
+                                } else {
                                     android.widget.Toast.makeText(
                                         context,
                                         "Audia is up to date (v${com.eplaytime.app.BuildConfig.VERSION_NAME})",

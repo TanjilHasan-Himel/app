@@ -209,6 +209,42 @@ the F0 gate evidence is recorded.
 - Push `main` to `origin/main`.
 - Retag `v9.1.1` to include this update engine so the initial release itself is update-aware.
 
+## SQA Hardening, Security Audit & Senior Code Review — 2026-11-17
+
+### 1. Delivery & Implementation
+- **Security Auditor Findings & Fixes:**
+  - **SEC-01 (URL Scheme & Host Validation):** Added `isTrustedUpdateUrl` in `AppUpdateParser.kt` strictly enforcing `https://` protocol and allowlisted domains (`github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`) to prevent SSRF and untrusted APK download redirects.
+  - **SEC-02 (Network Security Config Expansion):** Added `amazonaws.com`, `fastly.net`, and `crashlytics.com` to `network_security_config.xml` explicitly disallowing cleartext HTTP traffic.
+  - **SEC-03 (Android Auto IPC / Binder DoS Protection):** Clamped unpaged Android Auto queries in `MusicService.kt` `onGetChildren` to 100 items max with safe pagination offset/page bounds, eliminating `TransactionTooLargeException` risks over Binder IPC.
+  - **SEC-04 & SEC-05 (Audio Session ID Isolation & Caller UID Verification):** Removed `AUDIO_SESSION_ID` from public `sessionExtras` bundle broadcast; restricted custom command `ACTION_GET_AUDIO_SESSION_ID` strictly to internal processes (`controller.uid == Process.myUid()`).
+  - **SEC-06 & SEC-08 (M3U Path Traversal & Injection Defense):** Added `isSafePathOrUri` in `M3uHelper.kt` blocking path traversal (`..`), private internal storage (`/data/data/`, `/data/user/`), and CRLF injection characters in exported M3U files.
+- **Senior Code Reviewer Optimizations:**
+  - **Offline Update Error Handling:** Fixed `AppUpdateManager.kt` to suppress update check timestamps on network failures (`IOException`), preventing false negative 24h throttling when the device is offline.
+  - **Resource Leak Fix:** Wrapped `HttpURLConnection.inputStream` in `.use { it.readText() }` in `AppUpdateManager.kt`.
+  - **Performance Optimization in Playlist Search:** Replaced $O(N \cdot M)$ linear scan in `PlaylistRepository.kt` `importM3u` with an $O(N + M)$ lookup map index (`songsByUri`, `songsByTitleArtist`, `songsByTitleOnly`).
+  - **Atomic DB Shifting:** Replaced N+1 individual position update queries in `PlaylistDao.kt` with an atomic SQL shift query: `UPDATE playlist_items SET position = position - 1 WHERE playlistId = :playlistId AND position > :deletedPosition`.
+  - **Settings UI Polish:** Bound live `isCheckingForUpdates` StateFlow directly to `SettingsDialog.kt`, eliminating artificial delays and ensuring real-time response; fixed Privacy Policy navigation trigger.
+- **SQA & Test Engineer Hardening:**
+  - Standardized semantic version tag parsing to handle both `v1.2.3` and `V1.2.3`, as well as prerelease suffixes (`v1.2.3-beta`).
+  - Handled decimal seconds and Windows backslash paths in `M3uHelper.kt`.
+  - Configured `testOptions { unitTests.isReturnDefaultValues = true }` in `app/build.gradle.kts` for JVM unit test execution without Android mock log stub errors.
+  - Authored comprehensive edge-case test suites in `AppUpdateManagerTest.kt` and `M3uHelperTest.kt`.
+
+### 2. Verification Evidence
+- **JVM Unit Tests:**
+  `.\gradlew.bat :app:testDebugUnitTest` — **`BUILD SUCCESSFUL in 2m 15s`**
+  - 13 test suites (53 tests total, including `AppUpdateManagerTest`, `M3uHelperTest`, `PlaybackQueueUnitTest`, `ScheduledOccurrenceCalculatorTest`, `RadioBrowserClientTest`, `SongWikiUnitTest`, `LyricsCandidateScorerTest`, `LrcParserTest`, `BiquadFilterTest`, `MusicFilterUnitTest`), 100% passed.
+- **APK Assembly:**
+  `.\gradlew.bat :app:assembleDebug` — **`BUILD SUCCESSFUL in 1m 13s`**
+  - Output: `app\build\outputs\apk\debug\Audia-v9.1.1-debug.apk` successfully generated.
+
+### 3. Canonical Next Actions
+- Verify full test suite completion.
+- Commit all changes cleanly with conventional commit message.
+- Update `v9.1.1` tag and push to `origin/main` and `origin v9.1.1`.
+- Monitor GitHub Actions release workflow execution.
+
+
 
 
 

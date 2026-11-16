@@ -13,8 +13,7 @@ import com.eplaytime.app.data.model.AppUpdateInfo
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import javax.inject.Inject
@@ -72,14 +71,29 @@ class AppUpdateManager @Inject constructor(
             }
 
             // 1. Try Fastly CDN (version.json) first for speed and zero rate limits
-            var updateInfo = fetchFromRawVersionJson()
+            var fetchSucceeded = false
+            var updateInfo: AppUpdateInfo? = null
 
-            // 2. Fallback to GitHub Releases API if version.json wasn't accessible
-            if (updateInfo == null) {
-                updateInfo = fetchFromGitHubReleasesApi()
+            val rawResult = fetchFromRawVersionJson()
+            if (rawResult != null) {
+                fetchSucceeded = true
+                updateInfo = rawResult
+            } else {
+                // 2. Fallback to GitHub Releases API if version.json wasn't accessible
+                val (success, gitHubResult) = fetchFromGitHubReleasesApi()
+                if (success) {
+                    fetchSucceeded = true
+                    updateInfo = gitHubResult
+                }
             }
 
-            // Record check timestamp
+            if (!fetchSucceeded) {
+                // If offline or network unavailable, do NOT stamp lastUpdateCheckTime
+                Log.w(TAG, "Update check failed: unable to reach update endpoints")
+                return@withContext Result.failure(IOException("Update endpoints unreachable"))
+            }
+
+            // Record check timestamp only on verified network success
             dataStore.setLastUpdateCheckTime(now)
 
             if (updateInfo != null && updateInfo.isUpdateAvailable) {
@@ -107,7 +121,16 @@ class AppUpdateManager @Inject constructor(
      * Initiates downloading of the update APK via Android DownloadManager with notifications.
      */
     fun startDownload(updateInfo: AppUpdateInfo) {
-        val downloadUrl = updateInfo.downloadUrl.ifBlank { PERMANENT_DOWNLOAD_URL }
+        val rawDownloadUrl = updateInfo.downloadUrl.ifBlank { PERMANENT_DOWNLOAD_URL }
+        val downloadUrl = if (AppUpdateParser.isTrustedUpdateUrl(rawDownloadUrl)) {
+            rawDownloadUrl
+        } else {
+            Log.w(TAG, "Untrusted download URL detected ($rawDownloadUrl), reverting to permanent URL")
+            PERMANENT_DOWNLOAD_URL
+        }
+
+        val safeFileName = "Audia-${AppUpdateParser.sanitizeVersionFilename(updateInfo.latestVersionName)}.apk"
+
         try {
             val request = DownloadManager.Request(Uri.parse(downloadUrl)).apply {
                 setTitle("Audia ${updateInfo.latestVersionName}")
@@ -115,7 +138,7 @@ class AppUpdateManager @Inject constructor(
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 setDestinationInExternalPublicDir(
                     Environment.DIRECTORY_DOWNLOADS,
-                    "Audia-${updateInfo.latestVersionName}.apk"
+                    safeFileName
                 )
                 setMimeType("application/vnd.android.package-archive")
                 setAllowedOverMetered(true)
@@ -156,9 +179,7 @@ class AppUpdateManager @Inject constructor(
             }
 
             if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                val reader = BufferedReader(InputStreamReader(connection.inputStream))
-                val response = reader.readText()
-                reader.close()
+                val response = connection.inputStream.bufferedReader().use { it.readText() }
                 AppUpdateParser.parseVersionJson(response, BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME)
             } else {
                 null
@@ -171,7 +192,7 @@ class AppUpdateManager @Inject constructor(
         }
     }
 
-    private fun fetchFromGitHubReleasesApi(): AppUpdateInfo? {
+    private fun fetchFromGitHubReleasesApi(): Pair<Boolean, AppUpdateInfo?> {
         var connection: HttpURLConnection? = null
         return try {
             val url = URL(GITHUB_RELEASES_API)
@@ -184,16 +205,15 @@ class AppUpdateManager @Inject constructor(
             }
 
             if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                val reader = BufferedReader(InputStreamReader(connection.inputStream))
-                val response = reader.readText()
-                reader.close()
-                AppUpdateParser.parseGitHubReleaseJson(response, BuildConfig.VERSION_NAME)
+                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                val parsed = AppUpdateParser.parseGitHubReleaseJson(response, BuildConfig.VERSION_NAME)
+                Pair(true, parsed)
             } else {
-                null
+                Pair(false, null)
             }
         } catch (e: Exception) {
             Log.d(TAG, "GitHub Releases API fetch skipped: ${e.message}")
-            null
+            Pair(false, null)
         } finally {
             connection?.disconnect()
         }

@@ -9,6 +9,7 @@ import com.eplaytime.app.data.model.SavedQueueItem
 import com.eplaytime.app.data.model.Song
 import com.eplaytime.app.util.M3uHelper
 import kotlinx.coroutines.flow.Flow
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -96,10 +97,12 @@ class PlaylistRepository @Inject constructor(
     }
 
     suspend fun removePlaylistItem(playlistId: Long, itemId: Long) {
-        playlistDao.deleteItemById(playlistId, itemId)
-        // Normalize positions
-        val remaining = playlistDao.getPlaylistItemsDirect(playlistId)
-        playlistDao.updatePositions(remaining)
+        val item = playlistDao.getPlaylistItemsDirect(playlistId).find { it.id == itemId }
+        if (item != null) {
+            playlistDao.removeItemAndShift(playlistId, itemId, item.position)
+        } else {
+            playlistDao.deleteItemById(playlistId, itemId)
+        }
         touchPlaylist(playlistId)
     }
 
@@ -125,19 +128,31 @@ class PlaylistRepository @Inject constructor(
     }
 
     /**
-     * Imports an M3U playlist file, resolving tracks against the device library.
+     * Imports an M3U playlist file, resolving tracks against the device library with O(1) hash indexing.
      */
     suspend fun importM3u(name: String, m3uContent: String, knownSongs: List<Song>): Long {
         val entries = M3uHelper.parseM3u(m3uContent)
         val playlistId = createPlaylist(name)
 
+        // Pre-index known songs for O(1) lookups instead of O(N * M) linear scans
+        val songsByUri = knownSongs.associateBy { it.uri }
+        val songsByTitleArtist = knownSongs.groupBy {
+            it.title.trim().lowercase(Locale.ROOT) to it.artist.trim().lowercase(Locale.ROOT)
+        }
+        val songsByTitleOnly = knownSongs.groupBy {
+            it.title.trim().lowercase(Locale.ROOT)
+        }
+
         var position = 0
         val items = entries.map { entry ->
-            // Match against local library by URI or Title+Artist
-            val matchedSong = knownSongs.find { it.uri == entry.uriOrPath }
-                ?: knownSongs.find {
-                    it.title.equals(entry.title, ignoreCase = true) &&
-                    (entry.artist.isBlank() || it.artist.equals(entry.artist, ignoreCase = true))
+            val cleanTitle = entry.title.trim().lowercase(Locale.ROOT)
+            val cleanArtist = entry.artist.trim().lowercase(Locale.ROOT)
+
+            val matchedSong = songsByUri[entry.uriOrPath]
+                ?: if (cleanArtist.isNotBlank()) {
+                    songsByTitleArtist[cleanTitle to cleanArtist]?.firstOrNull()
+                } else {
+                    songsByTitleOnly[cleanTitle]?.firstOrNull()
                 }
 
             PlaylistItem(
@@ -153,9 +168,8 @@ class PlaylistRepository @Inject constructor(
             )
         }
 
-        if (items.isNotEmpty()) {
-            playlistDao.insertItems(items)
-        }
+        playlistDao.insertItems(items)
+        touchPlaylist(playlistId)
         return playlistId
     }
 

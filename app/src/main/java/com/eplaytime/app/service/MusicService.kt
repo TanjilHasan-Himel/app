@@ -265,9 +265,9 @@ class MusicService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
-            val isInternal = controller.packageName == packageName
+            val isInternal = controller.uid == android.os.Process.myUid() || controller.packageName == packageName
             val sessionCommandsBuilder = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
-            // Security: only expose internal DSP session ID command to Audia's own UI
+            // Security: only expose internal DSP session ID command to Audia's own verified process
             if (isInternal) {
                 sessionCommandsBuilder.add(SessionCommand("ACTION_GET_AUDIO_SESSION_ID", Bundle.EMPTY))
             }
@@ -310,7 +310,14 @@ class MusicService : MediaLibraryService() {
                         currentSongs = musicRepository.getAllSongs()
                     }
                     val items = buildMediaChildren(parentId, currentSongs)
-                    settable.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                    val pagedItems = if (pageSize > 0 && page >= 0) {
+                        val fromIndex = (page * pageSize).coerceAtMost(items.size)
+                        val toIndex = (fromIndex + pageSize).coerceAtMost(items.size)
+                        items.subList(fromIndex, toIndex)
+                    } else {
+                        items.take(100) // Safe clamp preventing IPC Binder TransactionTooLargeException
+                    }
+                    settable.set(LibraryResult.ofItemList(ImmutableList.copyOf(pagedItems), params))
                 } catch (e: Exception) {
                     Log.e(TAG, "Error building media children for $parentId", e)
                     settable.set(LibraryResult.ofItemList(ImmutableList.of(), params))
@@ -401,8 +408,9 @@ class MusicService : MediaLibraryService() {
             command: SessionCommand,
             args: Bundle
         ): ListenableFuture<SessionResult> {
-            if (controller.packageName != packageName) {
-                Log.w(TAG, "Rejected custom command ${command.customAction} from external package: ${controller.packageName}")
+            val isInternal = controller.uid == android.os.Process.myUid() || controller.packageName == packageName
+            if (!isInternal) {
+                Log.w(TAG, "Rejected custom command ${command.customAction} from external controller: ${controller.packageName} (UID: ${controller.uid})")
                 return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
             }
             return try {
@@ -412,13 +420,10 @@ class MusicService : MediaLibraryService() {
                         ?: AudioEffectManager.activeSessionId.value
                     if (sessionId > 0) {
                         AudioEffectManager.initialize(sessionId)
-                        val extras = Bundle().apply {
-                            putInt("AUDIO_SESSION_ID", sessionId)
-                        }
-                        session.setSessionExtras(extras)
                     }
-                    val extras = Bundle()
-                    extras.putInt("AUDIO_SESSION_ID", sessionId)
+                    val extras = Bundle().apply {
+                        putInt("AUDIO_SESSION_ID", sessionId)
+                    }
                     Log.d(TAG, "Responding to ACTION_GET_AUDIO_SESSION_ID with session: $sessionId")
                     Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, extras))
                 } else {
@@ -799,16 +804,9 @@ class MusicService : MediaLibraryService() {
             android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val sessionExtras = Bundle().apply {
-            val sid = player?.audioSessionId?.takeIf { it != C.AUDIO_SESSION_ID_UNSET && it > 0 }
-                ?: AudioEffectManager.activeSessionId.value
-            putInt("AUDIO_SESSION_ID", sid)
-        }
-
         mediaSession = MediaLibrarySession.Builder(this, player!!, sessionCallback)
             .setId("MusicService")
             .setSessionActivity(pendingIntent!!)
-            .setExtras(sessionExtras)
             .build()
 
         // Ensure Notification Channel for Media Playback has VISIBILITY_PUBLIC for Android 11/12 Lock Screen
@@ -842,10 +840,6 @@ class MusicService : MediaLibraryService() {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 if (audioSessionId != 0 && audioSessionId != C.AUDIO_SESSION_ID_UNSET) {
                     AudioEffectManager.initialize(audioSessionId)
-                    val extras = Bundle().apply {
-                        putInt("AUDIO_SESSION_ID", audioSessionId)
-                    }
-                    mediaSession?.setSessionExtras(extras)
                     Log.d(TAG, "ExoPlayer onAudioSessionIdChanged: $audioSessionId")
                 }
             }

@@ -45,6 +45,8 @@ fun SettingsDialog(
     onOpenScanFilters: () -> Unit = {},
     onTermsClick: () -> Unit,
     onAboutClick: () -> Unit,
+    onPrivacyClick: () -> Unit = onAboutClick,
+    isCheckingForUpdates: Boolean = false,
     onCheckForUpdates: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -410,17 +412,11 @@ fun SettingsDialog(
                     HorizontalDivider(color = GlassBorder)
 
                     // Check for Updates
-                    var isCheckingUpdate by remember { mutableStateOf(false) }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = !isCheckingUpdate) {
-                                isCheckingUpdate = true
+                            .clickable(enabled = !isCheckingForUpdates) {
                                 onCheckForUpdates?.invoke()
-                                coroutineScope.launch {
-                                    kotlinx.coroutines.delay(1200)
-                                    isCheckingUpdate = false
-                                }
                             }
                             .padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -448,7 +444,7 @@ fun SettingsDialog(
                                 color = TextSecondary
                             )
                         }
-                        if (isCheckingUpdate) {
+                        if (isCheckingForUpdates) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
                                 color = SoftGold,
@@ -490,7 +486,7 @@ fun SettingsDialog(
                         title = "Privacy Policy",
                         onClick = {
                             onDismiss()
-                            onTermsClick()
+                            onPrivacyClick()
                         }
                     )
                 }
