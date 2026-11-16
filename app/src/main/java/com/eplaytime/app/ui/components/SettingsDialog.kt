@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Policy
@@ -43,7 +44,8 @@ fun SettingsDialog(
     onToggleCallFilter: (Boolean) -> Unit,
     onOpenScanFilters: () -> Unit = {},
     onTermsClick: () -> Unit,
-    onAboutClick: () -> Unit
+    onAboutClick: () -> Unit,
+    onCheckForUpdates: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val dataStore = remember { PlayTimeDataStore(context) }
@@ -402,6 +404,63 @@ fun SettingsDialog(
                             ) {
                                 Text("Test Crash", fontSize = 12.sp, color = Color(0xFFFF5252), fontFamily = OutfitFontFamily)
                             }
+                        }
+                    }
+
+                    HorizontalDivider(color = GlassBorder)
+
+                    // Check for Updates
+                    var isCheckingUpdate by remember { mutableStateOf(false) }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isCheckingUpdate) {
+                                isCheckingUpdate = true
+                                onCheckForUpdates?.invoke()
+                                coroutineScope.launch {
+                                    kotlinx.coroutines.delay(1200)
+                                    isCheckingUpdate = false
+                                }
+                            }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            tint = SoftGold,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Check for Updates",
+                                fontFamily = OutfitFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 16.sp,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "Current version: v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
+                                fontFamily = OutfitFontFamily,
+                                fontWeight = FontWeight.Light,
+                                fontSize = 12.sp,
+                                color = TextSecondary
+                            )
+                        }
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = SoftGold,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
 

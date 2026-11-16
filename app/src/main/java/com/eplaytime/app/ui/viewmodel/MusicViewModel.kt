@@ -24,6 +24,8 @@ import com.eplaytime.app.data.network.LyricsCandidate
 import com.eplaytime.app.playback.playbackQueue
 import com.eplaytime.app.data.model.Playlist
 import com.eplaytime.app.data.model.PlaylistItem
+import com.eplaytime.app.data.model.AppUpdateInfo
+import com.eplaytime.app.data.network.AppUpdateManager
 import com.eplaytime.app.data.repository.PlaylistRepository
 import com.eplaytime.app.data.network.SongWikiClient
 import com.eplaytime.app.data.repository.Album
@@ -62,7 +64,8 @@ class MusicViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
     private val favoritesRepository: FavoritesRepository,
     private val playlistRepository: PlaylistRepository,
-    private val dataStore: PlayTimeDataStore
+    private val dataStore: PlayTimeDataStore,
+    private val appUpdateManager: AppUpdateManager
 ) : ViewModel() {
 
     private var cachedMediaSource: List<Song>? = null
@@ -230,6 +233,41 @@ class MusicViewModel @Inject constructor(
     fun dismissInAppNotification() {
         inAppNotificationJob?.cancel()
         _inAppNotification.value = null
+    }
+
+    // App Update Engine (GitHub Releases & Fastly CDN unthrottled checks)
+    private val _availableUpdate = MutableStateFlow<AppUpdateInfo?>(null)
+    val availableUpdate: StateFlow<AppUpdateInfo?> = _availableUpdate.asStateFlow()
+
+    private val _isCheckingForUpdates = MutableStateFlow(false)
+    val isCheckingForUpdates: StateFlow<Boolean> = _isCheckingForUpdates.asStateFlow()
+
+    fun checkForAppUpdates(force: Boolean = false, onComplete: ((AppUpdateInfo?) -> Unit)? = null) {
+        viewModelScope.launch {
+            _isCheckingForUpdates.value = true
+            val result = appUpdateManager.checkForUpdates(force = force)
+            _isCheckingForUpdates.value = false
+            val update = result.getOrNull()
+            if (update != null && update.isUpdateAvailable) {
+                _availableUpdate.value = update
+            }
+            onComplete?.invoke(update)
+        }
+    }
+
+    fun postponeUpdateReminder() {
+        viewModelScope.launch {
+            appUpdateManager.postponeReminder()
+            _availableUpdate.value = null
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        _availableUpdate.value = null
+    }
+
+    fun startUpdateDownload(updateInfo: AppUpdateInfo) {
+        appUpdateManager.startDownload(updateInfo)
     }
 
     fun updateVisualizerState() {
@@ -453,6 +491,9 @@ class MusicViewModel @Inject constructor(
                 _hasNewSongs.value = true
             }
         }
+
+        // Check for updates in background (throttled to 24h checks & 48h reminders)
+        checkForAppUpdates(force = false)
 
         // CRITICAL: Sync with service BEFORE restoring state from DataStore
         syncWithRunningService()

@@ -67,6 +67,7 @@ import com.eplaytime.app.ui.components.ScanFiltersBottomSheet
 import com.eplaytime.app.ui.components.SettingsDialog
 import com.eplaytime.app.ui.components.SongList
 import com.eplaytime.app.ui.components.AddToPlaylistDialog
+import com.eplaytime.app.ui.components.UpdateAvailableDialog
 import com.eplaytime.app.ui.screens.PlaylistDetailScreen
 import com.eplaytime.app.ui.screens.home.PlaylistList
 import com.eplaytime.app.ui.screens.home.*
@@ -156,6 +157,7 @@ fun HomeScreen(
     val userName by viewModel.userName.collectAsState()
     val audioSessionId by viewModel.audioSessionId.collectAsState()
     val allPlaylists by viewModel.allPlaylists.collectAsState()
+    val availableUpdate by viewModel.availableUpdate.collectAsState()
 
     var activePlaylistId by rememberSaveable { mutableStateOf<Long?>(null) }
     var songForPlaylistDialog by remember { mutableStateOf<Song?>(null) }
@@ -606,7 +608,18 @@ fun HomeScreen(
                         onToggleCallFilter = { viewModel.toggleCallRecordingFilter(it) },
                         onOpenScanFilters = { showScanFiltersSheet = true },
                         onTermsClick = onNavigateToAbout,
-                        onAboutClick = onNavigateToAbout
+                        onAboutClick = onNavigateToAbout,
+                        onCheckForUpdates = {
+                            viewModel.checkForAppUpdates(force = true) { update ->
+                                if (update == null || !update.isUpdateAvailable) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Audia is up to date (v${com.eplaytime.app.BuildConfig.VERSION_NAME})",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
                     )
                 }
 
@@ -646,6 +659,17 @@ fun HomeScreen(
                         song = songForPlaylistDialog!!,
                         viewModel = viewModel,
                         onDismiss = { songForPlaylistDialog = null }
+                    )
+                }
+
+                if (availableUpdate != null) {
+                    UpdateAvailableDialog(
+                        updateInfo = availableUpdate!!,
+                        onDismiss = { viewModel.postponeUpdateReminder() },
+                        onUpdateClick = { updateInfo ->
+                            viewModel.startUpdateDownload(updateInfo)
+                            viewModel.dismissUpdateDialog()
+                        }
                     )
                 }
 

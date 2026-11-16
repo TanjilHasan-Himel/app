@@ -176,6 +176,40 @@ the F0 gate evidence is recorded.
 - Bump version to `v9.1.1` in `app/version.properties` and tag `v9.1.1`.
 - Push to remote to trigger the fixed GitHub Actions CI/CD release workflow to deploy `v9.1.1` directly to `TanjilHasan-Himel/app`.
 
+## In-App Auto Update Engine & 2-Day Reminder System — 2026-11-17
+
+### 1. Delivery & Implementation
+- **Fastly CDN & GitHub API Dual-Engine (`AppUpdateManager.kt` & `AppUpdateParser.kt`):**
+  - Primary endpoint: `https://raw.githubusercontent.com/TanjilHasan-Himel/app/main/version.json` (Fastly CDN with zero API rate limits, instantaneous global distribution).
+  - Secondary fallback: `https://api.github.com/repos/TanjilHasan-Himel/app/releases/latest`.
+  - Zero third-party bloat: Built with native `HttpURLConnection` and `Dispatchers.IO`.
+  - Semantic version comparison and version code parser (`AppUpdateParser.kt`).
+- **Throttling & Gentle Reminder Intelligence:**
+  - Network check throttled to once every 24 hours (`CHECK_INTERVAL_MS = 86_400_000L`).
+  - Dismissal reminder throttled to once every 2 days (48 hours, `REMINDER_INTERVAL_MS = 172_800_000L`), preventing annoying repeated popups.
+  - Persistent timestamps stored in Jetpack Preferences DataStore (`LAST_UPDATE_CHECK_TIME`, `LAST_UPDATE_REMINDER_TIME`).
+- **UI Components:**
+  - `UpdateAvailableDialog.kt`: Translucent liquid glass dialog showcasing current version vs new version, dynamic "What's New" release notes container, "Update Now" action with Android `DownloadManager` integration, and "Remind Me Later (in 2 days)".
+  - `SettingsDialog.kt`: Added interactive "Check for Updates" tile with live checking spinner and immediate user feedback.
+  - `HomeScreen.kt`: Automatic background update check on app launch, exposing `UpdateAvailableDialog`.
+- **CI/CD Pipeline Integration:**
+  - Updated `.github/workflows/build-and-release.yml` to automatically generate and package `version.json` with every GitHub release.
+  - Pushed `version.json` to public showcase repo `https://github.com/TanjilHasan-Himel/app.git` (`HEAD -> main`).
+
+### 2. Verification Evidence
+- **JVM Unit Tests:**
+  `.\gradlew.bat testDebugUnitTest` — **`BUILD SUCCESSFUL in 6m 58s`** (12 test suites, including `AppUpdateManagerTest`, 100% passed).
+- **Physical Device Smoke Test (Samsung Galaxy M31 `R58N72BVFVD`):**
+  - Streamed install of `Audia-v9.1.1-debug.apk` succeeded.
+  - Verified in logcat: `D AppUpdateManager: Audia is up to date: local build is 9.1.1 (92)`.
+  - Verified live CDN fetch: `Invoke-RestMethod` to `https://raw.githubusercontent.com/TanjilHasan-Himel/app/main/version.json` returned valid JSON with 0 latency.
+
+### 3. Canonical Next Actions
+- Commit changes to `main`.
+- Push `main` to `origin/main`.
+- Retag `v9.1.1` to include this update engine so the initial release itself is update-aware.
+
+
 
 
 

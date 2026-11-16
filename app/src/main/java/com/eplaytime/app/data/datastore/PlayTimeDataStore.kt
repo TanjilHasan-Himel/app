@@ -74,6 +74,9 @@ class PlayTimeDataStore @Inject constructor(
         val EQ_BANDS_LEVELS = stringPreferencesKey("eq_bands_levels")
         val FIREBASE_ANALYTICS_ENABLED = booleanPreferencesKey("firebase_analytics_enabled")
         val FIREBASE_CRASHLYTICS_ENABLED = booleanPreferencesKey("firebase_crashlytics_enabled")
+        val LAST_UPDATE_CHECK_TIME = longPreferencesKey("last_update_check_time")
+        val LAST_UPDATE_REMINDER_TIME = longPreferencesKey("last_update_reminder_time")
+        val IGNORED_UPDATE_VERSION_CODE = intPreferencesKey("ignored_update_version_code")
     }
 
     private fun routePositionKey(songUri: String, route: String): Preferences.Key<Long> {
@@ -540,6 +543,39 @@ class PlayTimeDataStore @Inject constructor(
     suspend fun setCrashlyticsEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[Keys.FIREBASE_CRASHLYTICS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun getLastUpdateCheckTime(): Long {
+        val prefs = context.dataStore.data.firstOrNull() ?: return 0L
+        return prefs[Keys.LAST_UPDATE_CHECK_TIME] ?: 0L
+    }
+
+    suspend fun setLastUpdateCheckTime(timestamp: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LAST_UPDATE_CHECK_TIME] = timestamp
+        }
+    }
+
+    suspend fun getLastUpdateReminderTime(): Long {
+        val prefs = context.dataStore.data.firstOrNull() ?: return 0L
+        return prefs[Keys.LAST_UPDATE_REMINDER_TIME] ?: 0L
+    }
+
+    suspend fun setLastUpdateReminderTime(timestamp: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LAST_UPDATE_REMINDER_TIME] = timestamp
+        }
+    }
+
+    suspend fun getIgnoredUpdateVersionCode(): Int {
+        val prefs = context.dataStore.data.firstOrNull() ?: return 0
+        return prefs[Keys.IGNORED_UPDATE_VERSION_CODE] ?: 0
+    }
+
+    suspend fun setIgnoredUpdateVersionCode(versionCode: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.IGNORED_UPDATE_VERSION_CODE] = versionCode
         }
     }
 }

@@ -118,6 +118,27 @@ jobs:
             ${{ steps.prepare_artifacts.outputs.latest_apk }}
           retention-days: 14
 
+      - name: Generate version.json for CDN In-App Update Engine
+        id: generate_version_json
+        run: |
+          VERSION_TAG="${{ steps.target_task.outputs.release_tag }}"
+          CLEAN_VERSION="${VERSION_TAG#v}"
+          VERSION_CODE=1
+          if [ -f app/version.properties ]; then
+            VERSION_CODE=$(grep '^VERSION_CODE=' app/version.properties | cut -d'=' -f2)
+          fi
+          cat <<EOF > version.json
+          {
+            "versionCode": ${VERSION_CODE},
+            "versionName": "${CLEAN_VERSION}",
+            "releaseTitle": "Audia ${VERSION_TAG}",
+            "releaseNotes": "Audia ${VERSION_TAG} release. Offline audio workstation with liquid glass interface and Audiophile Media3 core.",
+            "downloadUrl": "https://github.com/TanjilHasan-Himel/app/releases/latest/download/Audia-latest.apk",
+            "releaseUrl": "https://github.com/TanjilHasan-Himel/app/releases/tag/${VERSION_TAG}"
+          }
+          EOF
+          cat version.json
+
       - name: Publish to Public GitHub Releases (TanjilHasan-Himel/app)
         if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish_release == 'true'
         uses: softprops/action-gh-release@v2
@@ -130,5 +151,6 @@ jobs:
           files: |
             ${{ steps.prepare_artifacts.outputs.primary_apk }}
             ${{ steps.prepare_artifacts.outputs.latest_apk }}
+            version.json
           generate_release_notes: true
           make_latest: true
