@@ -1,34 +1,9 @@
-# PlayTime Native – AI coding guide
+# Audia Instructions for GitHub Copilot & Codex
 
-## Big picture
-- Android app written in Kotlin using Jetpack Compose + Material 3 with MVVM + Hilt DI.
-- Data flow: UI (Compose screens) → ViewModels → Repository/Room → Services/Receivers.
-- USP: scheduled playback via AlarmManager → `AlarmReceiver` → `MusicService` (Media3) with boot persistence.
+Refer to `AGENTS.md` and `docs/audia/AUDIA_EXECUTION_ROADMAP.md` for full project guidelines.
 
-## Key areas & examples
-- App entry + DI: `MainActivity`, `PlayTimeApplication` (Hilt).
-- UI screens: Home + Scheduler + Mini Player in `ui/screens` and `ui/components`.
-- Playback: `service/MusicService` (Media3/ExoPlayer).
-- Scheduling: `receiver/AlarmReceiver`, `receiver/BootReceiver`, `util/AlarmScheduler`.
-- Data: `data/model` + `data/dao` + `data/database` + `data/repository`.
-
-## Build / test / debug workflows (PowerShell)
-- Build + install debug: `./gradlew installDebug`
-- Clean + reinstall: `./gradlew clean installDebug`
-- Tests: `./gradlew test`
-- Lint: `./gradlew lint`
-- Release APK: `./gradlew assembleRelease`
-- Live debug script: `./debug_app.ps1` (launches app + logcat filter)
-
-## Device/ADB conventions
-- ADB path is expected at `$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe` (see debug script).
-- Logcat filters typically include: `PlayTime|MainActivity|MusicService|AlarmReceiver|AndroidRuntime|FATAL`.
-
-## Project-specific patterns
-- Compose UI should use the OLED-dark theme tokens (background #121212, accent #1DB954) from the app theme.
-- ViewModels expose state for UI; playback and scheduling state live in `MusicViewModel` and `SchedulerViewModel`.
-- Room schema changes require updating the database version in `PlayTimeDatabase`.
-- Scheduled playback relies on exact alarms + wake locks + boot reschedule; be careful when touching receivers.
-
-## Dependencies worth knowing
-- Media3 (ExoPlayer), Room (KSP), Hilt, Coil, Accompanist permissions/system UI.
+## Key Rules
+1. **Living Diary Requirement:** Always read `docs/audia/AUDIA_CHECKPOINT.md` first to know the current ground truth. Before ending your turn or handoff, append a new dated section to `docs/audia/AUDIA_CHECKPOINT.md` documenting what you did, verified evidence, and what is next.
+2. **Roadmap Precedence:** `docs/audia/AUDIA_EXECUTION_ROADMAP.md` is the canonical engineering order. Continue only the first unverified gate unless explicitly redirected.
+3. **Debug First:** Develop and verify using `.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug`. Never deploy or push release tags without full debug verification.
+4. **Git Safety:** Treat worktree as shared and dirty. Check `git status --short` before and after work. Never overwrite unrelated changes. Push to remote only upon explicit user request.

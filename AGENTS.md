@@ -20,5 +20,12 @@
 - Default Kotlin verification is `./gradlew :app:testDebugUnitTest :app:assembleDebug`; use
   `.\gradlew.bat` on Windows. Add focused instrumentation, Macrobenchmark, and device tests according
   to risk. Never claim hardware success without captured evidence.
+- Cross-Agent Living Diary: Every AI agent (Gemini, Claude, Codex, Copilot, Cursor) MUST maintain
+  `docs/audia/AUDIA_CHECKPOINT.md` as the living session diary. At session start, read it to understand
+  the latest ground truth. At handoff, append a new dated milestone entry documenting files changed,
+  behavior delivered, test evidence, and the exact next task. Never leave future agents or the user
+  guessing what was completed.
+- Development-First Lifecycle: Always develop and debug using `:app:testDebugUnitTest` and `:app:assembleDebug`.
+  Only create or push a release tag (`v*`) once debug testing passes completely.
 - At handoff report: files changed, behavior delivered, exact commands/results, untested cases,
   remaining risks, and the next executable roadmap gate.

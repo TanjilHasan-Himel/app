@@ -68,3 +68,42 @@ the F0 gate evidence is recorded.
 - Unit tests, debug APK, lint, physical Queue opening and one physical reorder passed.
 - Canonical next phase remains F0C; this hotfix did not advance unrelated roadmap gates.
 
+## Release CI/CD, Distribution & Physical Telemetry Gate — 2026-11-16
+
+### 1. Delivery & Infrastructure
+- **Automated Gradle APK Naming:**
+  Configured `app/build.gradle.kts` with dynamic variant output naming:
+  `Audia-v<version>.apk` for Release (no redundant `-release` suffix) and `Audia-v<version>-debug.apk` for Debug.
+- **GitHub Actions CI/CD Pipeline:**
+  Created `.github/workflows/build-and-release.yml`. Triggered strictly on release tags (`v*`) and manual `workflow_dispatch`, eliminating unneeded runner minutes on ordinary feature commits.
+- **Cross-Repository Release Distribution Hub:**
+  Configured automated release publishing from the private development repository (`TanjilHasan-Himel/playtime-musicapp`) to the public showcase hub (`TanjilHasan-Himel/app`).
+  Resolved cross-repo target commitish handling (`target_commitish: main`) and secret token integration (`PUBLIC_REPO_TOKEN`).
+- **Official Production Release v9.1.0 Deployed:**
+  - Public Release: `https://github.com/TanjilHasan-Himel/app/releases/tag/v9.1.0`
+  - Permanent Direct Download Link Active: `https://github.com/TanjilHasan-Himel/app/releases/latest/download/Audia-latest.apk` (HTTP 302 redirect verified).
+  - Release APK size: 4,710,910 bytes (~4.7 MB) with R8 full minification and resource shrinking.
+
+### 2. Physical Device Telemetry Verification
+- Verified Firebase Crashlytics on physical Samsung Galaxy M31 (`SM-M315F`).
+- Verified Firebase Analytics in Firebase Console DebugView (6 active events verified from real device).
+- Cleaned up ADB debug property post-test (`debug.firebase.analytics.app .none.`).
+- Confirmed external backend dashboard is YAGNI for current single-developer phase.
+
+### 3. Android Auto Baseline Audit
+- Inspected `app/src/main/java/com/eplaytime/app/service/MusicService.kt`:
+  - `onGetLibraryRoot`: Returns root node with `isBrowsable = true`.
+  - `onGetChildren`: Currently hardcoded to return `ImmutableList.of()` (empty list).
+  - Status: Transport controls and lockscreen session work, but Android Auto / Car Head Unit media browsing currently displays an empty library. This constitutes Roadmap Phase A1.
+
+### 4. Canonical Next Actions
+1. **F0C Persistence and Security:**
+   - Room schema export and automated v8→v9→v10 migration tests.
+   - Restrict custom `ACTION_GET_AUDIO_SESSION_ID` command to internal controller.
+   - Replace global cleartext network exception with scoped radio stream policy.
+   - Persist scheduled `activePositionMs` for recovery after process termination.
+2. **A1 Real Android Auto:**
+   - Implement paged media tree in `MusicService.onGetChildren` (Tracks, Albums, Artists, Favorites, Folders).
+   - Implement item resolution and media URI handling for head unit playback.
+
+
