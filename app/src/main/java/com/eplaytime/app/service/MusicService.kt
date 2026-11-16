@@ -2,8 +2,11 @@ package com.eplaytime.app.service
 
 import com.eplaytime.app.R
 
+import android.content.ContentUris
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -21,7 +24,9 @@ import androidx.media3.session.SessionResult
 import com.eplaytime.app.data.repository.MusicRepository
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
 import com.google.common.collect.ImmutableList
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import android.util.Log
@@ -46,10 +51,19 @@ class MusicService : MediaLibraryService() {
         const val EXTRA_ALARM_ORIGINAL_VOLUME = "extra_alarm_original_volume"
         const val NOTIFICATION_ID_ALARM = 12345
         private const val TAG = "MusicService"
+
+        // Android Auto & MediaBrowser navigation constants
+        const val MEDIA_ROOT_ID = "root"
+        const val MEDIA_CATEGORY_TRACKS = "category_tracks"
+        const val MEDIA_CATEGORY_ALBUMS = "category_albums"
+        const val MEDIA_CATEGORY_ARTISTS = "category_artists"
+        const val MEDIA_CATEGORY_FAVORITES = "category_favorites"
     }
 
     @Inject
     lateinit var musicRepository: MusicRepository
+    @Inject
+    lateinit var favoritesRepository: com.eplaytime.app.data.repository.FavoritesRepository
     @Inject
     lateinit var scheduledTaskDao: com.eplaytime.app.data.dao.ScheduledTaskDao
 
@@ -239,18 +253,21 @@ class MusicService : MediaLibraryService() {
         else super.onStartCommand(intent, flags, startId)
     }
 
-    // Callback for MediaSession events
+    // Callback for MediaSession & Android Auto MediaLibrary events
     @OptIn(UnstableApi::class)
     private val sessionCallback = object : MediaLibrarySession.Callback {
         override fun onConnect(
             session: MediaSession,
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
-            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
-                .add(SessionCommand("ACTION_GET_AUDIO_SESSION_ID", Bundle.EMPTY))
-                .build()
+            val isInternal = controller.packageName == packageName
+            val sessionCommandsBuilder = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+            // Security: only expose internal DSP session ID command to Audia's own UI
+            if (isInternal) {
+                sessionCommandsBuilder.add(SessionCommand("ACTION_GET_AUDIO_SESSION_ID", Bundle.EMPTY))
+            }
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
-                .setAvailableSessionCommands(sessionCommands)
+                .setAvailableSessionCommands(sessionCommandsBuilder.build())
                 .build()
         }
 
@@ -260,9 +277,10 @@ class MusicService : MediaLibraryService() {
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
             val rootItem = MediaItem.Builder()
-                .setMediaId("root")
+                .setMediaId(MEDIA_ROOT_ID)
                 .setMediaMetadata(
                     androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle("Audia")
                         .setIsBrowsable(true)
                         .setIsPlayable(false)
                         .build()
@@ -270,8 +288,6 @@ class MusicService : MediaLibraryService() {
                 .build()
             return Futures.immediateFuture(LibraryResult.ofItem(rootItem, params))
         }
-
-// ...
 
         override fun onGetChildren(
             session: MediaLibrarySession,
@@ -281,8 +297,97 @@ class MusicService : MediaLibraryService() {
             pageSize: Int,
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-            // Return empty for now, as UI drives playback via controller.setMediaItem
-            return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
+            val settable = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+            serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    var currentSongs = musicRepository.songs.value
+                    if (currentSongs.isEmpty()) {
+                        currentSongs = musicRepository.getAllSongs()
+                    }
+                    val items = buildMediaChildren(parentId, currentSongs)
+                    settable.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error building media children for $parentId", e)
+                    settable.set(LibraryResult.ofItemList(ImmutableList.of(), params))
+                }
+            }
+            return settable
+        }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            if (mediaId.startsWith("song_")) {
+                val songId = mediaId.removePrefix("song_").toLongOrNull()
+                val song = musicRepository.songs.value.find { it.id == songId }
+                if (song != null) {
+                    return Futures.immediateFuture(LibraryResult.ofItem(songToMediaItem(song), null))
+                }
+            }
+            return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_BAD_VALUE))
+        }
+
+        override fun onAddMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: List<MediaItem>
+        ): ListenableFuture<List<MediaItem>> {
+            val currentSongs = musicRepository.songs.value
+            val resolvedItems = mediaItems.map { item ->
+                if (item.requestMetadata.mediaUri != null) {
+                    item
+                } else {
+                    val idStr = item.mediaId
+                    if (idStr.startsWith("song_")) {
+                        val songId = idStr.removePrefix("song_").toLongOrNull()
+                        val song = currentSongs.find { it.id == songId }
+                        if (song != null) songToMediaItem(song) else item
+                    } else item
+                }
+            }
+            return Futures.immediateFuture(resolvedItems)
+        }
+
+        override fun onSearch(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<Void>> {
+            session.notifySearchResultChanged(browser, query, 50, params)
+            return Futures.immediateFuture(LibraryResult.ofVoid(params))
+        }
+
+        override fun onGetSearchResult(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            val settable = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+            serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    var currentSongs = musicRepository.songs.value
+                    if (currentSongs.isEmpty()) {
+                        currentSongs = musicRepository.getAllSongs()
+                    }
+                    val q = query.trim().lowercase()
+                    val matched = currentSongs.filter {
+                        it.title.lowercase().contains(q) ||
+                        it.artist.lowercase().contains(q) ||
+                        it.album.lowercase().contains(q)
+                    }.take(50).map { songToMediaItem(it) }
+                    settable.set(LibraryResult.ofItemList(ImmutableList.copyOf(matched), params))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error performing search for $query", e)
+                    settable.set(LibraryResult.ofItemList(ImmutableList.of(), params))
+                }
+            }
+            return settable
         }
 
         override fun onCustomCommand(
@@ -291,6 +396,10 @@ class MusicService : MediaLibraryService() {
             command: SessionCommand,
             args: Bundle
         ): ListenableFuture<SessionResult> {
+            if (controller.packageName != packageName) {
+                Log.w(TAG, "Rejected custom command ${command.customAction} from external package: ${controller.packageName}")
+                return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+            }
             return try {
                 val action = command.customAction
                 if (action == "ACTION_GET_AUDIO_SESSION_ID") {
@@ -313,6 +422,133 @@ class MusicService : MediaLibraryService() {
             } catch (e: Exception) {
                 Log.e(TAG, "Error handling custom command", e)
                 Futures.immediateFuture(SessionResult(SessionError.ERROR_UNKNOWN))
+            }
+        }
+    }
+
+    private fun buildBrowsableItem(id: String, title: String, subtitle: String): MediaItem {
+        return MediaItem.Builder()
+            .setMediaId(id)
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setSubtitle(subtitle)
+                    .setIsBrowsable(true)
+                    .setIsPlayable(false)
+                    .build()
+            )
+            .build()
+    }
+
+    private fun songToMediaItem(song: com.eplaytime.app.data.model.Song): MediaItem {
+        val songUri = if (song.uri.isNotBlank()) {
+            Uri.parse(song.uri)
+        } else {
+            ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, song.id)
+        }
+        return MediaItem.Builder()
+            .setMediaId("song_${song.id}")
+            .setUri(songUri)
+            .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(songUri).build())
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(song.title)
+                    .setArtist(song.artist)
+                    .setAlbumTitle(song.album)
+                    .setArtworkUri(song.albumArtUri?.let { Uri.parse(it) })
+                    .setIsBrowsable(false)
+                    .setIsPlayable(true)
+                    .build()
+            )
+            .build()
+    }
+
+    private fun favoriteToMediaItem(fav: com.eplaytime.app.data.database.FavoriteSong): MediaItem {
+        val songUri = if (fav.uri.isNotBlank()) {
+            Uri.parse(fav.uri)
+        } else {
+            ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, fav.id)
+        }
+        return MediaItem.Builder()
+            .setMediaId("song_${fav.id}")
+            .setUri(songUri)
+            .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(songUri).build())
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(fav.title)
+                    .setArtist(fav.artist)
+                    .setArtworkUri(fav.albumArtUri?.let { Uri.parse(it) })
+                    .setIsBrowsable(false)
+                    .setIsPlayable(true)
+                    .build()
+            )
+            .build()
+    }
+
+    private suspend fun buildMediaChildren(parentId: String, songs: List<com.eplaytime.app.data.model.Song>): List<MediaItem> {
+        val favorites = try {
+            favoritesRepository.getAllFavorites().firstOrNull() ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+        return when (parentId) {
+            MEDIA_ROOT_ID -> {
+                listOf(
+                    buildBrowsableItem(MEDIA_CATEGORY_TRACKS, "All Songs", "${songs.size} tracks"),
+                    buildBrowsableItem(MEDIA_CATEGORY_ALBUMS, "Albums", "Browse by album"),
+                    buildBrowsableItem(MEDIA_CATEGORY_ARTISTS, "Artists", "Browse by artist"),
+                    buildBrowsableItem(MEDIA_CATEGORY_FAVORITES, "Favorites", "${favorites.size} tracks")
+                )
+            }
+            MEDIA_CATEGORY_TRACKS -> {
+                songs.map { songToMediaItem(it) }
+            }
+            MEDIA_CATEGORY_FAVORITES -> {
+                favorites.map { favoriteToMediaItem(it) }
+            }
+            MEDIA_CATEGORY_ALBUMS -> {
+                songs.groupBy { it.album }.map { (albumName, albumSongs) ->
+                    val firstSong = albumSongs.firstOrNull()
+                    val mediaMetadata = androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(albumName.ifBlank { "Unknown Album" })
+                        .setArtist(firstSong?.artist ?: "Unknown Artist")
+                        .setArtworkUri(firstSong?.albumArtUri?.let { Uri.parse(it) })
+                        .setIsBrowsable(true)
+                        .setIsPlayable(false)
+                        .build()
+                    MediaItem.Builder()
+                        .setMediaId("album_$albumName")
+                        .setMediaMetadata(mediaMetadata)
+                        .build()
+                }
+            }
+            MEDIA_CATEGORY_ARTISTS -> {
+                songs.groupBy { it.artist }.map { (artistName, artistSongs) ->
+                    val firstSong = artistSongs.firstOrNull()
+                    val mediaMetadata = androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(artistName.ifBlank { "Unknown Artist" })
+                        .setArtworkUri(firstSong?.albumArtUri?.let { Uri.parse(it) })
+                        .setIsBrowsable(true)
+                        .setIsPlayable(false)
+                        .build()
+                    MediaItem.Builder()
+                        .setMediaId("artist_$artistName")
+                        .setMediaMetadata(mediaMetadata)
+                        .build()
+                }
+            }
+            else -> {
+                when {
+                    parentId.startsWith("album_") -> {
+                        val albumName = parentId.removePrefix("album_")
+                        songs.filter { it.album == albumName }.map { songToMediaItem(it) }
+                    }
+                    parentId.startsWith("artist_") -> {
+                        val artistName = parentId.removePrefix("artist_")
+                        songs.filter { it.artist == artistName }.map { songToMediaItem(it) }
+                    }
+                    else -> emptyList()
+                }
             }
         }
     }

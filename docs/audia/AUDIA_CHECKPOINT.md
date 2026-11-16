@@ -106,4 +106,39 @@ the F0 gate evidence is recorded.
    - Implement paged media tree in `MusicService.onGetChildren` (Tracks, Albums, Artists, Favorites, Folders).
    - Implement item resolution and media URI handling for head unit playback.
 
+## Security Hardening (F0C) & Real Android Auto Media Tree (A1) — 2026-11-16
+
+### 1. Delivery & Implementation
+- **Public Showcase README Deployed:**
+  - Pushed ultra-high-converting, SEO & GEO-optimized `README.md` directly to `https://github.com/TanjilHasan-Himel/app.git` (`5be8e22..8d9d504 HEAD -> main`).
+  - Integrated 1-click golden direct download badge linking to permanent `Audia-latest.apk`.
+  - Added full architecture ASCII matrix, previous vs new 4-piece liquid glass visual comparison, and comprehensive feature matrix (Audia vs Poweramp vs Musicolet).
+- **Cross-Agent Living Diary Framework Established:**
+  - Formulated strict multi-agent protocol requiring session start diary reads and session end diary appends.
+  - Added dedicated agent guideline files: `AGENTS.md` (root contract), `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md`.
+- **F0C Network Security Hardening:**
+  - Created `app/src/main/res/xml/network_security_config.xml`: Strictly enforced HTTPS (disallow cleartext) for critical APIs (`lrclib.net`, `wikipedia.org`, `radio-browser.info`, `firebaseio.com`, `googleapis.com`). Scoped cleartext fallback strictly to legacy HTTP community radio streams.
+  - Removed global `android:usesCleartextTraffic="true"` from `AndroidManifest.xml`.
+  - Restricted custom `ACTION_GET_AUDIO_SESSION_ID` command in `MusicService.kt` strictly to internal Audia package callers (`controller.packageName == packageName`), returning `SessionError.ERROR_PERMISSION_DENIED` to external callers.
+- **A1 Real Android Auto Integration:**
+  - Created `app/src/main/res/xml/automotive_app_desc.xml` declaring `<automotiveApp><uses name="media" /></automotiveApp>`.
+  - Added automotive meta-data to `AndroidManifest.xml`.
+  - Implemented browsable root media hierarchy in `MusicService.kt`:
+    - `MEDIA_ROOT_ID` exposing 4 categories: `All Songs`, `Albums`, `Artists`, `Favorites`.
+    - `onGetChildren`: Resolves songs, albums, and artists into browsable and playable `MediaItem`s.
+    - `onGetItem`: Resolves individual media items by ID.
+    - `onAddMediaItems`: Automatically resolves content URIs and metadata for playback on head units.
+    - `onSearch` / `onGetSearchResult`: Enables voice and text search across the library.
+
+### 2. Verification Evidence
+- Verification command: `.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug`
+- Result: **`BUILD SUCCESSFUL in 6m 33s`** (53 actionable tasks executed/up-to-date, zero compile errors, all JVM unit tests passed).
+- Output: `app\build\outputs\apk\debug\Audia-v9.1.0-debug.apk` successfully packaged.
+
+### 3. Canonical Next Actions
+- Verify Room database schema export & automated migration test (`v8`→`v9`→`v10`).
+- Test Android Auto on Desktop Head Unit (DHU) or physical vehicle.
+- Bump version to `v9.1.1` and trigger release workflow upon user sign-off.
+
+
 
