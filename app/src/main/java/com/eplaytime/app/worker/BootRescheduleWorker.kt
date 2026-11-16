@@ -28,7 +28,18 @@ class BootRescheduleWorker(
 
             val enabledTasks = taskDao.getEnabledTasks().first()
             enabledTasks.forEach { task ->
-                alarmScheduler.scheduleAlarm(task)
+                val wasMissed = task.nextRunAt in 1 until System.currentTimeMillis() &&
+                    task.activeCycleId.isEmpty() && task.lastResult !in setOf("COMPLETED", "PLAYING")
+                val nextRunAt = alarmScheduler.scheduleAlarm(task)
+                if (nextRunAt == null) {
+                    taskDao.updateRunState(task.id, task.lastRunAt, "NEEDS_PERMISSION", "", 0, 0)
+                } else {
+                    taskDao.updateSchedulingState(
+                        task.id,
+                        nextRunAt,
+                        if (wasMissed) "MISSED" else task.lastResult.takeUnless { it == "NEEDS_PERMISSION" } ?: "READY"
+                    )
+                }
             }
 
             Log.d(TAG, "Rescheduled ${enabledTasks.size} alarms after boot")

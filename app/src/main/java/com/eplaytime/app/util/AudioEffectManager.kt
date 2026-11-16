@@ -41,6 +41,10 @@ object AudioEffectManager {
 
     private var effectsEnabled: Boolean = true
 
+    private var desiredBassStrength: Short = 0
+    private var desiredVirtualizerStrength: Short = 0
+    private val desiredBandLevels = mutableMapOf<Short, Short>()
+
     @Synchronized
     fun initialize(audioSessionId: Int) {
         if (audioSessionId <= 0) {
@@ -104,6 +108,7 @@ object AudioEffectManager {
         if (eqSuccess || bbSuccess || virtualizer != null) {
             _activeSessionId.value = audioSessionId
             _isInitialized.value = true
+            applyDesiredState()
             Log.d(TAG, "AudioEffectManager initialized successfully on session $audioSessionId")
         } else {
             _activeSessionId.value = 0
@@ -158,20 +163,24 @@ object AudioEffectManager {
         _isInitialized.value = false
     }
 
+    @Synchronized
     fun setBassBoostStrength(strength: Short) {
+        desiredBassStrength = strength.coerceIn(0, 1000).toShort()
         try {
             if (bassBoost?.strengthSupported == true) {
-                bassBoost?.setStrength(strength)
+                bassBoost?.setStrength(desiredBassStrength)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set bass boost strength", e)
         }
     }
 
+    @Synchronized
     fun setVirtualizerStrength(strength: Short) {
+        desiredVirtualizerStrength = strength.coerceIn(0, 1000).toShort()
         try {
             if (virtualizer?.strengthSupported == true) {
-                virtualizer?.setStrength(strength)
+                virtualizer?.setStrength(desiredVirtualizerStrength)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set virtualizer strength", e)
@@ -186,11 +195,17 @@ object AudioEffectManager {
         }
     }
 
+    @Synchronized
     fun setBandLevel(band: Short, level: Short) {
+        if (band < 0) return
+        val range = getBandLevelRange()
+        val safeLevel = level.coerceIn(range[0], range[1])
+        desiredBandLevels[band] = safeLevel
         try {
-            equalizer?.setBandLevel(band, level)
+            val eq = equalizer ?: return
+            if (band < eq.numberOfBands) eq.setBandLevel(band, safeLevel)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to set band level for band $band to $level", e)
+            Log.e(TAG, "Failed to set band level for band $band to $safeLevel", e)
         }
     }
 
@@ -212,9 +227,10 @@ object AudioEffectManager {
         }
     }
 
+    @Synchronized
     fun getBandLevel(band: Short): Short {
         return try {
-            equalizer?.getBandLevel(band) ?: 0
+            equalizer?.getBandLevel(band) ?: desiredBandLevels[band] ?: 0
         } catch (e: Exception) {
             Log.e(TAG, "Failed to getBandLevel for band $band", e)
             0
@@ -237,5 +253,12 @@ object AudioEffectManager {
             Log.e(TAG, "Failed to getBandLevelRange", e)
             shortArrayOf(-1500, 1500)
         }
+    }
+
+    @Synchronized
+    private fun applyDesiredState() {
+        setBassBoostStrength(desiredBassStrength)
+        setVirtualizerStrength(desiredVirtualizerStrength)
+        desiredBandLevels.toMap().forEach { (band, level) -> setBandLevel(band, level) }
     }
 }

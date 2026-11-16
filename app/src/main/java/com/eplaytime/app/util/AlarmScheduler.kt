@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.eplaytime.app.data.model.ScheduledTask
+import com.eplaytime.app.MainActivity
 import com.eplaytime.app.receiver.AlarmReceiver
 import java.util.*
 
@@ -26,32 +27,45 @@ class AlarmScheduler(private val context: Context) {
      * Uses setAlarmClock (the TRUE alarm clock API) for rock-solid reliability
      * This API guarantees the device WILL wake up, just like a system alarm clock
      */
-    fun scheduleAlarm(task: ScheduledTask) {
+    fun scheduleAlarm(task: ScheduledTask): Long? {
         // Check if we have permission (Android 12+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (!alarmManager.canScheduleExactAlarms()) {
                 Log.w(TAG, "❌ Cannot schedule exact alarms - permission not granted on Android 12+")
-                return
+                return null
             }
         }
 
         val alarmIntent = createAlarmIntent(task)
-        val triggerTime = calculateTriggerTime(task)
+        val triggerTime = ScheduledOccurrenceCalculator.nextTriggerMillis(
+            task.hour,
+            task.minute,
+            task.repeatDays
+        )
 
         try {
             Log.d(TAG, "📍 Scheduling exact playback for task ${task.id} at ${formatTime(task.hour, task.minute)}")
             
             // Use setAlarmClock (the TRUE alarm clock API) for rock-solid reliability
             // This API guarantees the device WILL wake up, just like a system alarm clock
-            val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerTime, alarmIntent)
+            val showIntent = PendingIntent.getActivity(
+                context,
+                task.id.toInt(),
+                context.packageManager.getLaunchIntentForPackage(context.packageName)
+                    ?: Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerTime, showIntent)
             alarmManager.setAlarmClock(
                 alarmClockInfo,
                 alarmIntent
             )
+            return triggerTime
 
             Log.d(TAG, "✓ Scheduled playback set successfully for task ${task.id}")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error scheduling playback for task ${task.id}", e)
+            return null
         }
     }
 
@@ -93,57 +107,6 @@ class AlarmScheduler(private val context: Context) {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-    }
-
-    /**
-     * Calculate trigger time for alarm
-     * Automatically handles repeat days to schedule on the exact next occurrence
-     */
-    private fun calculateTriggerTime(task: ScheduledTask): Long {
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, task.hour)
-            set(Calendar.MINUTE, task.minute)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-
-        if (task.repeatDays.isBlank()) {
-            // One-time alarm
-            if (calendar.timeInMillis <= System.currentTimeMillis()) {
-                calendar.add(Calendar.DAY_OF_MONTH, 1)
-            }
-            return calendar.timeInMillis
-        }
-
-        val selectedDays = task.repeatDays
-            .split(",")
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .toSet()
-
-        val dayMap = mapOf(
-            Calendar.SUNDAY to "SUN",
-            Calendar.MONDAY to "MON",
-            Calendar.TUESDAY to "TUE",
-            Calendar.WEDNESDAY to "WED",
-            Calendar.THURSDAY to "THU",
-            Calendar.FRIDAY to "FRI",
-            Calendar.SATURDAY to "SAT"
-        )
-
-        var daysAdded = 0
-        while (daysAdded < 7) {
-            val currentDayStr = dayMap[calendar.get(Calendar.DAY_OF_WEEK)]
-            if (selectedDays.contains(currentDayStr)) {
-                if (daysAdded > 0 || calendar.timeInMillis > System.currentTimeMillis()) {
-                    return calendar.timeInMillis
-                }
-            }
-            calendar.add(Calendar.DAY_OF_MONTH, 1)
-            daysAdded++
-        }
-
-        return calendar.timeInMillis
     }
 
     /**

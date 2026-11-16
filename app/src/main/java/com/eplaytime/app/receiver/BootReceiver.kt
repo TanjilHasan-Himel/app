@@ -26,8 +26,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         if (context == null || intent == null) return
 
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
-            intent.action == "android.intent.action.QUICKBOOT_POWERON") {
+        if (intent.action in supportedActions) {
 
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val now = System.currentTimeMillis()
@@ -39,8 +38,10 @@ class BootReceiver : BroadcastReceiver() {
             prefs.edit().putLong(KEY_LAST_ENQUEUE_MS, now).apply()
 
             Log.d(TAG, "Device boot completed - enqueueing alarm reschedule worker")
+            val delaySeconds = if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
+                intent.action == "android.intent.action.QUICKBOOT_POWERON") 45L else 0L
             val request = OneTimeWorkRequestBuilder<BootRescheduleWorker>()
-                .setInitialDelay(45, TimeUnit.SECONDS)
+                .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
                 "boot_reschedule_alarms",
@@ -49,4 +50,13 @@ class BootReceiver : BroadcastReceiver() {
             )
         }
     }
+
+    private val supportedActions = setOf(
+        Intent.ACTION_BOOT_COMPLETED,
+        "android.intent.action.QUICKBOOT_POWERON",
+        Intent.ACTION_TIME_CHANGED,
+        Intent.ACTION_TIMEZONE_CHANGED,
+        Intent.ACTION_MY_PACKAGE_REPLACED,
+        "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED"
+    )
 }

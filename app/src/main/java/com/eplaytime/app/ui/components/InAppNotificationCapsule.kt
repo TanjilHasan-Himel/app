@@ -5,22 +5,16 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -30,10 +24,7 @@ import com.eplaytime.app.ui.theme.OutfitFontFamily
 import com.eplaytime.app.ui.theme.SoftGold
 
 /**
- * InAppNotificationCapsule - Apple Dynamic Island / Luxury Floating HUD
- *
- * Smooth spring-animated notification capsule floating gracefully from the top.
- * Provides high-contrast glassmorphic design, contextual badges, and tap-to-dismiss.
+ * Lightweight transient feedback for actions that have no persistent on-screen state.
  */
 @Composable
 fun InAppNotificationCapsule(
@@ -58,62 +49,33 @@ fun InAppNotificationCapsule(
         modifier = modifier
     ) {
         val nonNullMessage = message ?: ""
-        val (icon, badgeColor) = getContextualNotificationIcon(nonNullMessage, accentColor)
+        val (icon, feedbackColor) = getContextualNotificationIcon(nonNullMessage, accentColor)
 
         Box(
             modifier = Modifier
-                .shadow(
-                    elevation = 16.dp,
-                    shape = RoundedCornerShape(26.dp),
-                    spotColor = badgeColor.copy(alpha = 0.35f),
-                    ambientColor = Color.Black.copy(alpha = 0.5f)
-                )
-                .clip(RoundedCornerShape(26.dp))
-                .background(Color(0xFF141418).copy(alpha = 0.94f))
-                .border(
-                    width = 1.2.dp,
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            badgeColor.copy(alpha = 0.70f),
-                            Color.White.copy(alpha = 0.20f),
-                            badgeColor.copy(alpha = 0.45f)
-                        )
-                    ),
-                    shape = RoundedCornerShape(26.dp)
-                )
                 .clickable { onDismiss() }
-                .padding(horizontal = 18.dp, vertical = 10.dp),
+                .padding(horizontal = 20.dp, vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(11.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Circular Glowing Icon Badge
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(badgeColor.copy(alpha = 0.18f))
-                        .border(1.dp, badgeColor.copy(alpha = 0.40f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = badgeColor,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = feedbackColor,
+                    modifier = Modifier.size(17.dp)
+                )
 
                 // Message Text
                 Text(
                     text = nonNullMessage,
                     fontFamily = OutfitFontFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
                     color = Color.White,
-                    letterSpacing = 0.3.sp
+                    letterSpacing = 0.1.sp
                 )
             }
         }
@@ -130,7 +92,7 @@ private fun getContextualNotificationIcon(message: String, defaultColor: Color):
         lower.contains("speed") -> Pair(Icons.Default.Speed, Color(0xFFFFD54F))
         lower.contains("lyrics") -> Pair(Icons.Default.MusicNote, Color(0xFF64B5F6))
         lower.contains("cover") || lower.contains("artwork") -> Pair(Icons.Default.Image, Color(0xFFBA68C8))
-        lower.contains("tag") -> Pair(Icons.Default.Label, defaultColor)
+        lower.contains("tag") -> Pair(Icons.AutoMirrored.Filled.Label, defaultColor)
         lower.contains("ringtone") || lower.contains("alarm") -> Pair(Icons.Default.NotificationsActive, Color(0xFFFFB74D))
         lower.contains("copy") || lower.contains("copied") -> Pair(Icons.Default.ContentCopy, Color(0xFF81C784))
         lower.contains("error") || lower.contains("fail") || lower.contains("unable") -> Pair(Icons.Default.Warning, Color(0xFFFF7043))

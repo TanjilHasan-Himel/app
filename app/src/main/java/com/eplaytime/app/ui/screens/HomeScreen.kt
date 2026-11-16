@@ -38,6 +38,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.eplaytime.app.util.PermissionHelper
+import com.eplaytime.app.util.FirebaseDiagnostics
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -57,6 +62,7 @@ import com.eplaytime.app.ui.components.AudioEffectsSheet
 import com.eplaytime.app.ui.components.HeroGlassPlate
 import com.eplaytime.app.ui.components.HomeMenuBottomSheet
 import com.eplaytime.app.ui.components.MiniPlayer
+import com.eplaytime.app.ui.components.RadioMiniPlayer
 import com.eplaytime.app.ui.components.ScanFiltersBottomSheet
 import com.eplaytime.app.ui.components.SettingsDialog
 import com.eplaytime.app.ui.components.SongList
@@ -78,19 +84,15 @@ fun HomeScreen(
     onNavigateToPlayer: () -> Unit,
     onNavigateToAbout: () -> Unit = {},
     onNavigateToQueue: () -> Unit = {},
+    onNavigateToRadio: () -> Unit = {},
     onNavigateToFolder: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     
     // Permission handling
-    val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.READ_MEDIA_AUDIO
-    } else {
-        Manifest.permission.READ_EXTERNAL_STORAGE
-    }
-    
     val requiredPermissions = remember {
-        val list = mutableListOf(audioPermission)
+        val list = mutableListOf(PermissionHelper.audioPermission)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             list.add(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -98,15 +100,29 @@ fun HomeScreen(
     }
 
     var hasPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED
-        )
+        mutableStateOf(PermissionHelper.hasAudioPermission(context))
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val granted = PermissionHelper.hasAudioPermission(context)
+                if (granted != hasPermission) {
+                    hasPermission = granted
+                    if (granted) {
+                        viewModel.rescanDevice()
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        val isGranted = results[audioPermission] ?: false
+        val isGranted = results[PermissionHelper.audioPermission] ?: false
         hasPermission = isGranted
         if (isGranted) {
             viewModel.rescanDevice()
@@ -119,62 +135,14 @@ fun HomeScreen(
         }
     }
     
-    if (!hasPermission) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(BlackBackground),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.MusicNote,
-                    contentDescription = null,
-                    tint = SoftGold,
-                    modifier = Modifier.size(72.dp)
-                )
-                Text(
-                    text = "Permission Required",
-                    fontFamily = OutfitFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 24.sp,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "Audia Player needs access to your music files to play them.",
-                    fontFamily = OutfitFontFamily,
-                    fontWeight = FontWeight.Light,
-                    fontSize = 14.sp,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = { permissionLauncher.launch(requiredPermissions) },
-                    colors = ButtonDefaults.buttonColors(containerColor = SoftGold)
-                ) {
-                    Text(
-                        text = "Grant Permission",
-                        fontFamily = OutfitFontFamily,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.Black
-                    )
-                }
-            }
-        }
-        return
-    }
-    
     val songList by viewModel.songList.collectAsState()
     val albums by viewModel.albums.collectAsState()
     val artists by viewModel.artists.collectAsState()
     val folders by viewModel.folders.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
+    val currentRadioStation by viewModel.currentRadioStation.collectAsState()
+    val radioNowPlaying by viewModel.radioNowPlaying.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val allFavorites by viewModel.allFavorites.collectAsState(initial = emptyList())
     val recentPlayedSongs by viewModel.recentPlayedSongs.collectAsState()
@@ -268,6 +236,11 @@ fun HomeScreen(
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
     val tabs = remember { listOf("Tracks", "Folders", "Albums", "Artists", "Favorites") }
 
+    LaunchedEffect(selectedTabIndex) {
+        val tabName = tabs.getOrNull(selectedTabIndex) ?: "Tracks"
+        FirebaseDiagnostics.recordScreen(context, "HomeScreen_$tabName")
+    }
+
     val recentAddedSongs = remember(songList) {
         val visibleSongs = songList.filterNot { song -> isSongFromHiddenFolder(song) }
         val withDate = visibleSongs.filter { it.dateAdded > 0L }
@@ -285,8 +258,9 @@ fun HomeScreen(
         allFavorites
     ) {
         val query = searchQuery.text.trim().lowercase(Locale.US)
+        val favoriteUris = allFavorites.asSequence().map { it.uri }.toHashSet()
         val baseList = when (selectedTabIndex) {
-            4 -> songList.filter { song -> allFavorites.any { it.uri == song.uri } }
+            4 -> songList.filter { song -> song.uri in favoriteUris }
             else -> songList
         }
         if (query.isEmpty()) baseList
@@ -395,31 +369,77 @@ fun HomeScreen(
         return
     }
 
-    Scaffold(
-        containerColor = BlackBackground,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = {
-            if (isPlaying || currentSong != null) {
-                Column {
-                    currentSong?.let { song ->
-                        MiniPlayer(
-                            song = song,
-                            isPlaying = isPlaying,
-                            onPlayPauseClick = { viewModel.togglePlayPause() },
-                            onSongClick = onNavigateToPlayer,
-                            onNextClick = { viewModel.playNext() },
-                            onPreviousClick = { viewModel.playPrevious() },
-                            viewModel = viewModel
-                        )
-                    }
-                    Spacer(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .windowInsetsBottomHeight(WindowInsets.navigationBars)
+    if (!hasPermission) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(BlackBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MusicNote,
+                    contentDescription = null,
+                    tint = SoftGold,
+                    modifier = Modifier.size(72.dp)
+                )
+                Text(
+                    text = "Permission Required",
+                    fontFamily = OutfitFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 24.sp,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Audia Player needs access to your music files to build and play your offline library.",
+                    fontFamily = OutfitFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 14.sp,
+                    color = TextSecondary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { permissionLauncher.launch(requiredPermissions) },
+                    colors = ButtonDefaults.buttonColors(containerColor = SoftGold, contentColor = Color.Black),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(0.75f)
+                ) {
+                    Text(
+                        text = "Grant Permission",
+                        fontFamily = OutfitFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+                OutlinedButton(
+                    onClick = { PermissionHelper.openAppSettings(context) },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(0.75f)
+                ) {
+                    Text(
+                        text = "Open App Settings",
+                        fontFamily = OutfitFontFamily,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White
                     )
                 }
             }
         }
+        return
+    }
+
+    Scaffold(
+        containerColor = BlackBackground,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = {}  // MiniPlayer floats over content — not in bottomBar
     ) { innerPadding ->
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val screenWidth = maxWidth
@@ -429,32 +449,6 @@ fun HomeScreen(
                     screenWidth >= 600.dp -> 180.dp
                     else -> 150.dp
                 }
-            }
-
-            // --- Atmospheric Ambient Gradient & Artwork Glow (YouTube Music style) ---
-            if (bgAmbientModel != null) {
-                AsyncImage(
-                    model = bgAmbientModel,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(520.dp)
-                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                        .drawWithContent {
-                            drawContent()
-                            drawRect(
-                                brush = Brush.verticalGradient(
-                                    0.0f to Color.Black,
-                                    0.60f to Color.Black,
-                                    1.0f to Color.Transparent
-                                ),
-                                blendMode = BlendMode.DstIn
-                            )
-                        }
-                        .blur(56.dp)
-                        .alpha(0.38f),
-                    contentScale = ContentScale.Crop
-                )
             }
 
             val glowColor = if (bgAmbientModel != null) animatedAccentColor else BrandGlowColor
@@ -478,7 +472,6 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = innerPadding.calculateBottomPadding())
                     .nestedScroll(nestedScrollConnection)
                     .graphicsLayer { 
                         translationY = contentOffsetY.toPx() 
@@ -602,6 +595,7 @@ fun HomeScreen(
                         hasNewSongs = hasNewSongs,
                         onScanClick = { showScanFiltersSheet = true },
                         onSchedulerClick = onNavigateToScheduler,
+                        onRadioClick = onNavigateToRadio,
                         onEffectsClick = {
                             viewModel.requestAudioSessionId()
                             showAudioEffectsSheet = true
@@ -680,7 +674,7 @@ fun HomeScreen(
                                         songs = filteredSongs,
                                         currentSongId = currentSong?.id,
                                         onSongClick = { song ->
-                                            viewModel.playSong(song.uri)
+                                            viewModel.playSongInQueue(filteredSongs, song.uri)
                                             onNavigateToPlayer()
                                         },
                                         state = tracksListState
@@ -692,8 +686,8 @@ fun HomeScreen(
                                         recentlyPlayedSongs = recentPlayedSongs,
                                         mostPlayedSongs = mostPlayedSongs,
                                         currentSongId = currentSong?.id,
-                                        onSongClick = { song ->
-                                            viewModel.playSong(song.uri)
+                                        onSongClick = { song, queue ->
+                                            viewModel.playSongInQueue(queue, song.uri)
                                             if (isSearchExpanded) {
                                                 onNavigateToPlayer()
                                             }
@@ -718,7 +712,7 @@ fun HomeScreen(
                                     onAlbumClick = { album ->
                                         val songs = viewModel.getSongsByAlbum(album.name)
                                         songs.firstOrNull()?.let { 
-                                            viewModel.playSong(it.uri)
+                                            viewModel.playSongInQueue(songs, it.uri)
                                             if (isSearchExpanded || searchQuery.text.isNotBlank()) {
                                                 onNavigateToPlayer()
                                             }
@@ -734,7 +728,7 @@ fun HomeScreen(
                                     onArtistClick = { artist ->
                                         val songs = viewModel.getSongsByArtist(artist.name)
                                         songs.firstOrNull()?.let { 
-                                            viewModel.playSong(it.uri)
+                                            viewModel.playSongInQueue(songs, it.uri)
                                             if (isSearchExpanded || searchQuery.text.isNotBlank()) {
                                                 onNavigateToPlayer()
                                             }
@@ -749,7 +743,7 @@ fun HomeScreen(
                                     songs = filteredSongs,
                                     currentSongId = currentSong?.id,
                                     onSongClick = { song -> 
-                                        viewModel.playSong(song.uri)
+                                        viewModel.playSongInQueue(filteredSongs, song.uri)
                                         if (isSearchExpanded || searchQuery.text.isNotBlank()) {
                                             onNavigateToPlayer()
                                         }
@@ -771,6 +765,39 @@ fun HomeScreen(
                         .align(Alignment.TopCenter)
                         .offset(y = plateOffsetY)
                 )
+            }
+
+            // Floating MiniPlayer — overlays song list so glass sees content behind it
+            if (isPlaying || currentSong != null || currentRadioStation != null) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(bottom = 6.dp)
+                ) {
+                    currentSong?.let { song ->
+                        MiniPlayer(
+                            song = song,
+                            isPlaying = isPlaying,
+                            onPlayPauseClick = { viewModel.togglePlayPause() },
+                            onSongClick = onNavigateToPlayer,
+                            onNextClick = { viewModel.playNext() },
+                            onPreviousClick = { viewModel.playPrevious() },
+                            accentColor = animatedAccentColor,
+                            viewModel = viewModel
+                        )
+                    }
+                    currentRadioStation?.takeIf { currentSong == null }?.let { station ->
+                        RadioMiniPlayer(
+                            station = station,
+                            nowPlaying = radioNowPlaying,
+                            isPlaying = isPlaying,
+                            onOpen = onNavigateToRadio,
+                            onPlayPause = viewModel::togglePlayPause
+                        )
+                    }
+                }
             }
         }
     }

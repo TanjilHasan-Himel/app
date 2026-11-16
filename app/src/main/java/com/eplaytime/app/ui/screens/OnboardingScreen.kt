@@ -1,21 +1,18 @@
 package com.eplaytime.app.ui.screens
 
 import android.Manifest
-import android.app.AlarmManager
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
-import android.os.PowerManager
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,7 +27,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
@@ -38,15 +38,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -62,24 +58,17 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.eplaytime.app.R
 import com.eplaytime.app.ui.theme.*
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberPermissionState
+import com.eplaytime.app.util.PermissionHelper
 import kotlinx.coroutines.launch
 
-private enum class SetupRequirement {
-    MEDIA,
-    NOTIFICATIONS,
-    RECORD_AUDIO,
-    BATTERY_OPTIMIZATION
-}
-
-@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun OnboardingScreen(
     onComplete: (name: String) -> Unit
@@ -112,32 +101,32 @@ fun OnboardingScreen(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 48.dp, start = 24.dp, end = 24.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                repeat(3) { index ->
-                    Box(
-                        modifier = Modifier
-                            .size(if (pagerState.currentPage == index) 10.dp else 8.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (pagerState.currentPage == index) SoftGold
-                                else Color.White.copy(alpha = 0.25f)
-                            )
-                    )
+        // Bottom Indicator and navigation (Only visible on page 0 & 1)
+        if (pagerState.currentPage < 2) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 36.dp, start = 24.dp, end = 24.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    repeat(3) { index ->
+                        Box(
+                            modifier = Modifier
+                                .size(if (pagerState.currentPage == index) 10.dp else 8.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (pagerState.currentPage == index) SoftGold
+                                    else Color.White.copy(alpha = 0.25f)
+                                )
+                        )
+                    }
                 }
-            }
 
-            if (pagerState.currentPage < 2) {
                 Button(
                     onClick = {
-                        if (pagerState.currentPage == 0 && name.isBlank()) return@Button
                         scope.launch {
                             pagerState.animateScrollToPage(pagerState.currentPage + 1)
                         }
@@ -145,15 +134,7 @@ fun OnboardingScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = SoftGold, contentColor = Color.Black),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Next", color = Color.Black, fontWeight = FontWeight.Bold)
-                }
-            } else {
-                Button(
-                    onClick = { onComplete(if (name.isBlank()) "Friend" else name) },
-                    colors = ButtonDefaults.buttonColors(containerColor = SoftGold, contentColor = Color.Black),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Start Using", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("Next", color = Color.Black, fontWeight = FontWeight.Bold, fontFamily = OutfitFontFamily)
                 }
             }
         }
@@ -212,7 +193,7 @@ private fun WelcomeNameStep(name: String, onNameChange: (String) -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 decorationBox = { innerTextField ->
                     if (name.isEmpty()) {
-                        Text("Your Name", color = Color.White.copy(alpha = 0.3f), fontSize = 18.sp)
+                        Text("Your Name (Optional)", color = Color.White.copy(alpha = 0.3f), fontSize = 18.sp, fontFamily = OutfitFontFamily)
                     }
                     innerTextField()
                 }
@@ -251,191 +232,328 @@ private fun FeatureItem(icon: ImageVector, title: String, desc: String) {
         Icon(icon, null, tint = SoftGold, modifier = Modifier.size(40.dp))
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text(desc, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp, fontFamily = OutfitFontFamily)
+            Text(desc, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, fontFamily = OutfitFontFamily)
         }
     }
 }
 
-@OptIn(ExperimentalPermissionsApi::class)
 @Composable
-private fun PermissionsStep(name: String, onComplete: (String) -> Unit) {
+private fun PermissionsStep(
+    name: String,
+    onComplete: (String) -> Unit
+) {
     val context = LocalContext.current
-    val alarmManager = context.getSystemService(AlarmManager::class.java)
-    val powerManager = context.getSystemService(PowerManager::class.java)
-    val mediaPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.READ_MEDIA_AUDIO
-    } else {
-        Manifest.permission.READ_EXTERNAL_STORAGE
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    var musicGranted by remember { mutableStateOf(PermissionHelper.hasAudioPermission(context)) }
+    var notifGranted by remember { mutableStateOf(PermissionHelper.hasNotificationPermission(context)) }
+    var visualizerGranted by remember { mutableStateOf(PermissionHelper.hasRecordAudioPermission(context)) }
+    var batteryGranted by remember { mutableStateOf(PermissionHelper.isIgnoringBatteryOptimizations(context)) }
+
+    fun refreshPermissions() {
+        musicGranted = PermissionHelper.hasAudioPermission(context)
+        notifGranted = PermissionHelper.hasNotificationPermission(context)
+        visualizerGranted = PermissionHelper.hasRecordAudioPermission(context)
+        batteryGranted = PermissionHelper.isIgnoringBatteryOptimizations(context)
     }
 
-    val mediaPermissionState = rememberPermissionState(mediaPermission)
-    val notificationPermissionState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
-    } else null
-    val recordPermissionState = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
-
-    var settingsRefreshTick by remember { mutableIntStateOf(0) }
-
-    val batteryOptimizationLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) {
-        settingsRefreshTick++
-    }
-
-    val steps = remember {
-        listOf(
-            SetupRequirement.MEDIA,
-            SetupRequirement.NOTIFICATIONS,
-            SetupRequirement.RECORD_AUDIO,
-            SetupRequirement.BATTERY_OPTIMIZATION
-        )
-    }
-
-    fun isGranted(step: SetupRequirement): Boolean {
-        return when (step) {
-            SetupRequirement.MEDIA -> mediaPermissionState.status.isGranted
-            SetupRequirement.NOTIFICATIONS -> notificationPermissionState?.status?.isGranted ?: true
-            SetupRequirement.RECORD_AUDIO -> recordPermissionState.status.isGranted
-            SetupRequirement.BATTERY_OPTIMIZATION -> Build.VERSION.SDK_INT < Build.VERSION_CODES.M || (powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true)
-        }
-    }
-
-    var currentStepIndex by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(
-        mediaPermissionState.status.isGranted,
-        notificationPermissionState?.status?.isGranted,
-        recordPermissionState.status.isGranted,
-        settingsRefreshTick
-    ) {
-        while (currentStepIndex < steps.size && isGranted(steps[currentStepIndex])) {
-            currentStepIndex++
-        }
-    }
-
-    val currentStep = steps.getOrNull(currentStepIndex)
-    val allGranted = currentStep == null
-
-    val title = when (currentStep) {
-        SetupRequirement.MEDIA -> "Allow Music Access"
-        SetupRequirement.NOTIFICATIONS -> "Allow Notifications"
-        SetupRequirement.RECORD_AUDIO -> "Allow Visualizer"
-        SetupRequirement.BATTERY_OPTIMIZATION -> "Allow Battery Bypass"
-        null -> "All set"
-    }
-    val description = when (currentStep) {
-        SetupRequirement.MEDIA -> "We need access to your audio files once so Audia Player can build your library."
-        SetupRequirement.NOTIFICATIONS -> "Playback controls and scheduler alerts use notifications."
-        SetupRequirement.RECORD_AUDIO -> "This powers the spectrum and visualizer in the player."
-        SetupRequirement.BATTERY_OPTIMIZATION -> "This reduces missed schedules on aggressive battery systems."
-        null -> "Everything is enabled. You won’t see these setup prompts again."
-    }
-
-    val buttonLabel = when (currentStep) {
-        SetupRequirement.MEDIA -> "Grant Music Access"
-        SetupRequirement.NOTIFICATIONS -> "Grant Notifications"
-        SetupRequirement.RECORD_AUDIO -> "Grant Visualizer"
-        SetupRequirement.BATTERY_OPTIMIZATION -> "Open Battery Settings"
-        null -> "Start Using"
-    }
-
-    val buttonAction: () -> Unit = when (currentStep) {
-        SetupRequirement.MEDIA -> ({ mediaPermissionState.launchPermissionRequest() })
-        SetupRequirement.NOTIFICATIONS -> ({ notificationPermissionState?.launchPermissionRequest() })
-        SetupRequirement.RECORD_AUDIO -> ({ recordPermissionState.launchPermissionRequest() })
-        SetupRequirement.BATTERY_OPTIMIZATION -> ({
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.fromParts("package", context.packageName, null)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshPermissions()
             }
-            batteryOptimizationLauncher.launch(intent)
-        })
-        null -> ({ onComplete(if (name.isBlank()) "Friend" else name) })
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val mediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        musicGranted = granted
+        refreshPermissions()
+    }
+
+    val notifLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        notifGranted = granted
+        refreshPermissions()
+    }
+
+    val visualizerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        visualizerGranted = granted
+        refreshPermissions()
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(28.dp),
+            .padding(horizontal = 24.dp)
+            .padding(top = 48.dp, bottom = 36.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.audia_player_logo),
-            contentDescription = null,
-            modifier = Modifier
-                .size(88.dp)
-                .clip(CircleShape)
-                .border(2.dp, SoftGold.copy(alpha = 0.35f), CircleShape)
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = if (allGranted) "You’re ready, ${if (name.isBlank()) "Friend" else name}!" else title,
-            fontFamily = OutfitFontFamily, fontSize = 20.sp,
-            color = Color.White,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = description,
-            fontFamily = OutfitFontFamily, fontSize = 14.sp,
-            color = Color.White.copy(alpha = 0.75f),
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = BlackSurface.copy(alpha = 0.8f)),
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                PermissionRow("Music files", isGranted(SetupRequirement.MEDIA))
-                PermissionRow("Notifications", isGranted(SetupRequirement.NOTIFICATIONS))
-                PermissionRow("Visualizer", isGranted(SetupRequirement.RECORD_AUDIO))
-                PermissionRow("Battery bypass", isGranted(SetupRequirement.BATTERY_OPTIMIZATION))
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = buttonAction,
-            colors = ButtonDefaults.buttonColors(containerColor = SoftGold, contentColor = Color.Black),
-            shape = RoundedCornerShape(14.dp),
+        // Top Header
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(buttonLabel, color = Color.Black, fontWeight = FontWeight.Bold)
+            Image(
+                painter = painterResource(id = R.drawable.audia_player_logo),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(68.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, SoftGold.copy(alpha = 0.4f), CircleShape)
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = if (musicGranted) "You're All Set!" else "Permissions & Setup",
+                fontFamily = OutfitFontFamily,
+                fontSize = 22.sp,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = if (musicGranted)
+                    "Audio access is granted. Optional permissions can be configured below or anytime in Settings."
+                    else "Audia Player needs access to your local audio tracks to play music.",
+                fontFamily = OutfitFontFamily,
+                fontSize = 13.sp,
+                color = Color.White.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
         }
 
-        if (!allGranted) {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = "We ask these once during first launch. After setup, no more popups.",
-                color = Color.White.copy(alpha = 0.55f),
-                textAlign = TextAlign.Center,
-                fontSize = 12.sp
+        // Permission Items List
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            PermissionCard(
+                icon = Icons.Default.MusicNote,
+                title = "Music & Audio Files",
+                description = "Required to scan and play your offline music",
+                isGranted = musicGranted,
+                isRequired = true,
+                onAction = {
+                    mediaLauncher.launch(PermissionHelper.audioPermission)
+                }
             )
+
+            PermissionCard(
+                icon = Icons.Default.Notifications,
+                title = "Notification Controls",
+                description = "Lock-screen & background playback controls",
+                isGranted = notifGranted,
+                isRequired = false,
+                onAction = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        PermissionHelper.openNotificationSettings(context)
+                    }
+                }
+            )
+
+            PermissionCard(
+                icon = Icons.Default.BatteryChargingFull,
+                title = "Battery Saver Whitelist",
+                description = "Ensures scheduled alarms wake phone on time",
+                isGranted = batteryGranted,
+                isRequired = false,
+                onAction = {
+                    PermissionHelper.openBatteryOptimizationSettings(context)
+                }
+            )
+
+            PermissionCard(
+                icon = Icons.Default.GraphicEq,
+                title = "Live Audio Visualizer",
+                description = "Powers the real-time frequency spectrum",
+                isGranted = visualizerGranted,
+                isRequired = false,
+                onAction = {
+                    visualizerLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            )
+        }
+
+        // Bottom CTA
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Button(
+                onClick = {
+                    if (!musicGranted) {
+                        mediaLauncher.launch(PermissionHelper.audioPermission)
+                    } else {
+                        onComplete(name.ifBlank { "Friend" })
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = SoftGold,
+                    contentColor = Color.Black
+                ),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                Text(
+                    text = if (musicGranted) "Start Using Audia" else "Grant Music Access",
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    fontFamily = OutfitFontFamily
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Having trouble? ",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontFamily = OutfitFontFamily
+                )
+                Text(
+                    text = "Open App Settings",
+                    fontSize = 12.sp,
+                    color = SoftGold,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = OutfitFontFamily,
+                    modifier = Modifier.clickable { PermissionHelper.openAppSettings(context) }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun PermissionRow(label: String, granted: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = Icons.Default.CheckCircle,
-            contentDescription = null,
-            tint = if (granted) Color(0xFF4CAF50) else Color.White.copy(alpha = 0.25f),
-            modifier = Modifier.size(18.dp)
+private fun PermissionCard(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    isGranted: Boolean,
+    isRequired: Boolean,
+    onAction: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isGranted) Color(0x331E293B) else Color(0x40161822)
+        ),
+        shape = RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isGranted) Color(0xFF4CAF50).copy(alpha = 0.35f) else Color.White.copy(alpha = 0.12f)
         )
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = label,
-            color = Color.White.copy(alpha = if (granted) 0.95f else 0.65f),
-            fontSize = 14.sp,
-            fontWeight = if (granted) FontWeight.SemiBold else FontWeight.Normal
-        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isGranted) Color(0x224CAF50) else Color(0x22FFFFFF)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isGranted) Color(0xFF4CAF50) else SoftGold,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        fontFamily = OutfitFontFamily,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                    if (isRequired) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Required",
+                            fontFamily = OutfitFontFamily,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SoftGold
+                        )
+                    }
+                }
+                Text(
+                    text = description,
+                    fontFamily = OutfitFontFamily,
+                    fontSize = 11.sp,
+                    color = Color.White.copy(alpha = 0.65f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            if (isGranted) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0x2E4CAF50))
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color(0xFF4CAF50),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Enabled",
+                        fontFamily = OutfitFontFamily,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4CAF50)
+                    )
+                }
+            } else {
+                Button(
+                    onClick = onAction,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isRequired) SoftGold else Color.White.copy(alpha = 0.15f),
+                        contentColor = if (isRequired) Color.Black else Color.White
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(30.dp)
+                ) {
+                    Text(
+                        text = if (isRequired) "Grant" else "Allow",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = OutfitFontFamily
+                    )
+                }
+            }
+        }
     }
 }

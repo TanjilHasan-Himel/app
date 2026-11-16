@@ -31,7 +31,7 @@ fun FolderList(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         state = state,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(items = folders, key = { it.path }, contentType = { "folder" }) { folder ->

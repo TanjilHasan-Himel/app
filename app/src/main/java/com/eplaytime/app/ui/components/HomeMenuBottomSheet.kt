@@ -30,6 +30,7 @@ fun HomeMenuBottomSheet(
     hasNewSongs: Boolean,
     onScanClick: () -> Unit,
     onSchedulerClick: () -> Unit,
+    onRadioClick: () -> Unit,
     onEffectsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
@@ -125,6 +126,17 @@ fun HomeMenuBottomSheet(
             )
 
             // 3. Audio Effects & Equalizer
+            MenuActionItem(
+                icon = Icons.Default.Radio,
+                title = "Live Internet Radio",
+                subtitle = "Real stations by country, language and genre",
+                iconTint = SoftGold,
+                onClick = {
+                    onDismiss()
+                    onRadioClick()
+                }
+            )
+
             MenuActionItem(
                 icon = Icons.Default.Tune,
                 title = "Audio Effects & EQ",

@@ -10,6 +10,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.eplaytime.app.data.model.Song
+import com.eplaytime.app.ui.components.FeaturedMostPlayedCarousel
 import com.eplaytime.app.ui.components.TurntableCarousel
 
 @Composable
@@ -19,7 +20,7 @@ fun SpotifyTracksFeed(
     recentlyPlayedSongs: List<Song>,
     mostPlayedSongs: List<Song>,
     currentSongId: Long?,
-    onSongClick: (Song) -> Unit,
+    onSongClick: (Song, List<Song>) -> Unit,
     state: LazyListState,
     modifier: Modifier = Modifier,
     cardWidth: Dp = 150.dp
@@ -27,35 +28,22 @@ fun SpotifyTracksFeed(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         state = state,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        val turntableSongs = if (recentlyPlayedSongs.isNotEmpty()) recentlyPlayedSongs.take(15) else allSongs.take(15)
+        val turntableSongs = if (recentlyPlayedSongs.isNotEmpty()) recentlyPlayedSongs.take(10) else allSongs.take(10)
         if (turntableSongs.isNotEmpty()) {
             item {
-                HomeSectionTitle(if (recentlyPlayedSongs.isNotEmpty()) "Recently Played" else "Featured Turntable")
-            }
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .layout { measurable, constraints ->
-                            val extraPx = 32.dp.roundToPx()
-                            val placeable = measurable.measure(
-                                constraints.copy(
-                                    minWidth = constraints.minWidth + extraPx,
-                                    maxWidth = constraints.maxWidth + extraPx
-                                )
-                            )
-                            layout(placeable.width, placeable.height) {
-                                placeable.place(-16.dp.roundToPx(), 0)
-                            }
-                        }
-                ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    HomeSectionTitle(
+                        title = if (recentlyPlayedSongs.isNotEmpty()) "Recently Played" else "Featured Turntable",
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
                     TurntableCarousel(
-                        songs = turntableSongs.take(15),
+                        songs = turntableSongs,
                         currentSongId = currentSongId,
-                        onSongClick = onSongClick
+                        onSongClick = { song -> onSongClick(song, turntableSongs) },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -63,15 +51,17 @@ fun SpotifyTracksFeed(
 
         if (mostPlayedSongs.isNotEmpty()) {
             item {
-                HomeSectionTitle("Most Played")
-            }
-            item {
-                SongHorizontalRail(
-                    songs = mostPlayedSongs.take(7),
-                    currentSongId = currentSongId,
-                    onSongClick = onSongClick,
-                    cardWidth = cardWidth
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    HomeSectionTitle(
+                        title = "Most Played",
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                    FeaturedMostPlayedCarousel(
+                        songs = mostPlayedSongs.take(15),
+                        currentSongId = currentSongId,
+                        onSongClick = { song -> onSongClick(song, mostPlayedSongs) }
+                    )
+                }
             }
         }
 
@@ -83,7 +73,7 @@ fun SpotifyTracksFeed(
                 SongHorizontalRail(
                     songs = recentAddedSongs.take(12),
                     currentSongId = currentSongId,
-                    onSongClick = onSongClick,
+                    onSongClick = { song -> onSongClick(song, recentAddedSongs) },
                     cardWidth = cardWidth
                 )
             }
@@ -97,7 +87,7 @@ fun SpotifyTracksFeed(
             SongRowItem(
                 song = song,
                 isCurrent = song.id == currentSongId,
-                onClick = { onSongClick(song) }
+                onClick = { onSongClick(song, allSongs) }
             )
         }
     }

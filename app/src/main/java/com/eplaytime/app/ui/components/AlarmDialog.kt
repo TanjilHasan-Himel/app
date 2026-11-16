@@ -39,6 +39,12 @@ import com.eplaytime.app.ui.theme.OutfitFontFamily
 import com.eplaytime.app.ui.theme.SoftGold
 import java.util.*
 
+data class ScheduledContentSelection(
+    val type: String,
+    val title: String,
+    val songs: List<Song>
+)
+
 /**
  * Glassmorphism Alarm Dialog (Version 3.0 Pro)
  * Supports: Creating, Editing, Specific Time, and Countdown Timer.
@@ -48,7 +54,7 @@ fun AlarmDialog(
     songList: List<Song>,
     alarmToEdit: ScheduledTask? = null,
     onDismiss: () -> Unit,
-    onConfirm: (Song, Float, String, Int, Int) -> Unit // SelectedSong, Volume, Days, Hour, Minute
+    onConfirm: (ScheduledContentSelection, Float, String, Int, Int, Int, Int) -> Unit
 ) {
     // === State Initialization ===
     
@@ -81,7 +87,21 @@ fun AlarmDialog(
             else songList.firstOrNull() 
         ) 
     }
+    var selectedContentType by remember { mutableStateOf(alarmToEdit?.contentType ?: "TRACK") }
+    var selectedContentSongs by remember(songList, alarmToEdit) {
+        mutableStateOf(
+            alarmToEdit?.contentUris
+                ?.lineSequence()
+                ?.filter(String::isNotBlank)
+                ?.mapNotNull { uri -> songList.firstOrNull { it.uri == uri } }
+                ?.toList()
+                .orEmpty()
+                .ifEmpty { listOfNotNull(selectedSong) }
+        )
+    }
     var selectedVolume by remember { mutableStateOf(alarmToEdit?.targetVolume ?: 0.5f) }
+    var stopAfterMinutes by remember { mutableIntStateOf(alarmToEdit?.stopAfterMinutes ?: 0) }
+    var fadeInSeconds by remember { mutableIntStateOf(alarmToEdit?.fadeInSeconds ?: 10) }
     var selectedDays by remember { 
         mutableStateOf(
             if (!alarmToEdit?.repeatDays.isNullOrEmpty()) alarmToEdit!!.repeatDays.split(",").toSet()
@@ -139,7 +159,7 @@ fun AlarmDialog(
                 ) {
                     // Header
                     Text(
-                        text = if (alarmToEdit != null) "Edit Alarm" else "Set Alarm",
+                        text = if (alarmToEdit != null) "Edit Session" else "New Session",
                         fontFamily = OswaldFontFamily,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
@@ -214,8 +234,21 @@ fun AlarmDialog(
 
                     // === SETTINGS (Song, Vol, Days) ===
                     
-                    // Song Selector (Clickable Row)
-                    Text("Music", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.align(Alignment.Start))
+                    Text("Content", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.align(Alignment.Start))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        items(listOf("TRACK", "ALBUM", "FOLDER", "PLAYLIST", "QUEUE")) { type ->
+                            FilterChip(
+                                selected = selectedContentType == type,
+                                onClick = {
+                                    selectedContentType = type
+                                    selectedContentSongs = emptyList()
+                                    showSearchOverlay = true
+                                },
+                                label = { Text(type.lowercase().replaceFirstChar(Char::uppercase)) }
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         modifier = Modifier
@@ -228,14 +261,21 @@ fun AlarmDialog(
                     ) {
                          Column(modifier = Modifier.weight(1f)) {
                              Text(
-                                 text = selectedSong?.title ?: "Select a song...",
+                                 text = when {
+                                     selectedContentSongs.isEmpty() -> "Select ${selectedContentType.lowercase()}..."
+                                     selectedContentType == "TRACK" -> selectedContentSongs.first().title
+                                     else -> alarmToEdit?.songTitle?.takeIf {
+                                         alarmToEdit.contentType == selectedContentType
+                                     } ?: "${selectedContentSongs.size} tracks selected"
+                                 },
                                  color = Color.White,
                                  fontWeight = FontWeight.Medium,
                                  maxLines = 1
                              )
-                             if (selectedSong != null) {
+                             if (selectedContentSongs.isNotEmpty()) {
                                  Text(
-                                     text = selectedSong?.artist ?: "",
+                                     text = if (selectedContentType == "TRACK") selectedContentSongs.first().artist
+                                     else "Plays once, then stops",
                                      color = Color.Gray,
                                      fontSize = 12.sp,
                                      maxLines = 1
@@ -264,6 +304,37 @@ fun AlarmDialog(
                         )
                     )
 
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Fade in", color = Color.Gray, fontSize = 12.sp)
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(if (fadeInSeconds == 0) "Off" else "${fadeInSeconds}s", color = Color.White, fontSize = 12.sp)
+                    }
+                    Slider(
+                        value = fadeInSeconds.toFloat(),
+                        onValueChange = { fadeInSeconds = (it / 5f).toInt() * 5 },
+                        valueRange = 0f..60f,
+                        steps = 11,
+                        colors = SliderDefaults.colors(
+                            thumbColor = SoftGold,
+                            activeTrackColor = SoftGold,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Stop", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.align(Alignment.Start))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        items(listOf(0 to "When finished", 30 to "30 min", 60 to "1 hour", 120 to "2 hours")) { option ->
+                            FilterChip(
+                                selected = stopAfterMinutes == option.first,
+                                onClick = { stopAfterMinutes = option.first },
+                                label = { Text(option.second) }
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // Weekdays
@@ -290,13 +361,28 @@ fun AlarmDialog(
                         
                         Button(
                             onClick = {
-                                if (selectedSong != null) {
+                                if (selectedContentSongs.isNotEmpty()) {
                                     val daysString = selectedDays.joinToString(",")
-                                    onConfirm(selectedSong!!, selectedVolume, daysString, selectedHour, selectedMinute)
+                                    val title = when (selectedContentType) {
+                                        "TRACK" -> selectedContentSongs.first().title
+                                        "ALBUM" -> selectedContentSongs.first().album
+                                        "FOLDER" -> selectedContentSongs.first().bucketDisplayName.ifBlank { "Folder" }
+                                        "PLAYLIST" -> "Playlist (${selectedContentSongs.size})"
+                                        else -> "Custom queue (${selectedContentSongs.size})"
+                                    }
+                                    onConfirm(
+                                        ScheduledContentSelection(selectedContentType, title, selectedContentSongs),
+                                        selectedVolume,
+                                        daysString,
+                                        selectedHour,
+                                        selectedMinute,
+                                        stopAfterMinutes,
+                                        fadeInSeconds
+                                    )
                                 }
                             },
                              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954)),
-                             enabled = selectedSong != null,
+                             enabled = selectedContentSongs.isNotEmpty(),
                              modifier = Modifier.weight(1f)
                         ) {
                             Text("Save", color = Color.White, fontWeight = FontWeight.Bold)
@@ -349,7 +435,7 @@ fun AlarmDialog(
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         Text(
-                            text = "Select Music",
+                            text = "Select ${selectedContentType.lowercase().replaceFirstChar(Char::uppercase)}",
                             fontFamily = OswaldFontFamily,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
@@ -358,11 +444,13 @@ fun AlarmDialog(
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        SongSearchContent(
+                        ScheduleContentPicker(
                             songList = songList,
-                            initialQuery = selectedSong?.title ?: "",
-                            onSongSelected = { 
-                                selectedSong = it
+                            type = selectedContentType,
+                            initialSelection = selectedContentSongs,
+                            onSelected = {
+                                selectedContentSongs = it
+                                selectedSong = it.firstOrNull()
                                 showSearchOverlay = false
                             }
                         )
@@ -448,7 +536,7 @@ private fun TimerInput(
         
         // Helper Text
         Text(
-            text = "Alarm will ring at $resultingTime",
+            text = "Playback will start at $resultingTime",
             color = Color(0xFF1DB954),
             fontSize = 14.sp
         )
@@ -626,22 +714,33 @@ private fun WeekDaySelector(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SongSearchContent(
+private fun ScheduleContentPicker(
     songList: List<Song>,
-    initialQuery: String,
-    onSongSelected: (Song) -> Unit
+    type: String,
+    initialSelection: List<Song>,
+    onSelected: (List<Song>) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
-    val filtered = remember(query, songList) {
-        if (query.isEmpty()) songList.take(50)
-        else songList.filter { it.title.contains(query, true) || it.artist.contains(query, true) }
+    var queueSelection by remember(type, initialSelection) {
+        mutableStateOf(initialSelection.map(Song::uri).toSet())
+    }
+    val groups = remember(type, query, songList) {
+        val source = if (query.isBlank()) songList else songList.filter {
+            it.title.contains(query, true) || it.artist.contains(query, true) ||
+                it.album.contains(query, true) || it.bucketDisplayName.contains(query, true)
+        }
+        when (type) {
+            "ALBUM" -> source.filter { it.album.isNotBlank() }.groupBy(Song::album).toList()
+            "FOLDER" -> source.groupBy { it.bucketDisplayName.ifBlank { it.folderPath } }.toList()
+            else -> source.take(100).map { it.title to listOf(it) }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = { Text("Search songs...", color = Color.Gray) },
+            placeholder = { Text("Search ${type.lowercase()}...", color = Color.Gray) },
             modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Color.White,
@@ -654,12 +753,19 @@ private fun SongSearchContent(
             leadingIcon = { Icon(Icons.Default.Search, "Search", tint = Color.Gray) }
         )
 
-        LazyColumn {
-            items(filtered) { song ->
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            items(groups, key = { it.first }) { (name, songs) ->
+                 val isMultiSelect = type == "QUEUE" || type == "PLAYLIST"
+                 val selected = isMultiSelect && songs.first().uri in queueSelection
                  Row(
                      modifier = Modifier
                          .fillMaxWidth()
-                         .clickable { onSongSelected(song) }
+                         .clickable {
+                             if (isMultiSelect) {
+                                 val uri = songs.first().uri
+                                 queueSelection = if (selected) queueSelection - uri else queueSelection + uri
+                             } else onSelected(songs)
+                         }
                          .padding(vertical = 12.dp, horizontal = 4.dp),
                      verticalAlignment = Alignment.CenterVertically
                  ) {
@@ -671,18 +777,36 @@ private fun SongSearchContent(
                             .background(Color.White.copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center
                      ) {
-                         Icon(Icons.Default.MusicNote, "Song", tint = SoftGold)
+                         Icon(Icons.Default.MusicNote, null, tint = SoftGold)
                      }
                      
                      Spacer(modifier = Modifier.width(12.dp))
                      
                      Column(modifier = Modifier.weight(1f)) {
-                         Text(song.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                         Text(song.artist, color = Color.Gray, fontSize = 12.sp, maxLines = 1)
+                         Text(name.ifBlank { "Unknown" }, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                         Text(
+                             if (songs.size == 1) songs.first().artist else "${songs.size} tracks",
+                             color = Color.Gray,
+                             fontSize = 12.sp,
+                             maxLines = 1
+                         )
                      }
+                     if (isMultiSelect) Checkbox(
+                         checked = selected,
+                         onCheckedChange = null,
+                         colors = CheckboxDefaults.colors(checkedColor = SoftGold)
+                     )
                  }
                  HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
             }
+        }
+        if (type == "QUEUE" || type == "PLAYLIST") Button(
+            onClick = { onSelected(songList.filter { it.uri in queueSelection }) },
+            enabled = queueSelection.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = SoftGold)
+        ) {
+            Text("Use ${queueSelection.size} selected tracks", color = Color.Black)
         }
     }
 }

@@ -800,7 +800,7 @@ private fun SmoothVerticalFader(
             // Luxury Metallic/Gold Knob
             Box(
                 modifier = Modifier
-                    .offset { IntOffset(0, (knobYPx - 10.dp.toPx()).roundToInt()) }
+                    .offset { IntOffset(0, verticalFaderOffsetPx(normalizedFraction, trackHeightPx).roundToInt()) }
                     .width(34.dp)
                     .height(20.dp)
                     .clip(RoundedCornerShape(6.dp))
@@ -842,6 +842,9 @@ private fun SmoothVerticalFader(
         )
     }
 }
+
+internal fun verticalFaderOffsetPx(normalizedFraction: Float, trackHeightPx: Float): Float =
+    (0.5f - normalizedFraction.coerceIn(0f, 1f)) * trackHeightPx
 
 /**
  * Launch Samsung's native SoundAlive / Dolby Atmos system EQ panel

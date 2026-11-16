@@ -25,13 +25,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -197,42 +192,21 @@ fun LyricsView(
             if (now >= userScrollPauseUntil) {
                 delay(20)
                 listState.animateScrollToItem(
-                    index = activeIndex,
+                    index = (activeIndex - 2).coerceAtLeast(0),
                     scrollOffset = 0
                 )
             }
         }
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val availableHeight = maxHeight
-        // Calculate adaptive vertical padding so active line lands exactly in center
-        val centerPadding = if (isSynced) {
-            (availableHeight / 2 - 28.dp).coerceAtLeast(16.dp)
-        } else {
-            16.dp
-        }
-
+    Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                .drawWithContent {
-                    drawContent()
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            0.0f to Color.Transparent,
-                            0.08f to Color.Black,
-                            0.92f to Color.Black,
-                            1.0f to Color.Transparent
-                        ),
-                        blendMode = BlendMode.DstIn
-                    )
-                },
+                .fillMaxSize(),
             contentPadding = PaddingValues(
-                top = centerPadding,
-                bottom = if (isSynced) centerPadding else 48.dp,
+                top = 16.dp,
+                bottom = 48.dp,
                 start = 20.dp,
                 end = 20.dp
             ),
@@ -337,7 +311,7 @@ fun LyricsView(
                         .clickable {
                             userScrollPauseUntil = 0L
                             scope.launch {
-                                listState.animateScrollToItem(activeIndex, 0)
+                                listState.animateScrollToItem((activeIndex - 2).coerceAtLeast(0), 0)
                             }
                         }
                         .padding(horizontal = 14.dp, vertical = 6.dp)

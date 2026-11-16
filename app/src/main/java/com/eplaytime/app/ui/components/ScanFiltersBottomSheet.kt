@@ -52,6 +52,7 @@ fun ScanFiltersBottomSheet(
     val haptic = LocalHapticFeedback.current
 
     val minDurationSec by viewModel.minSongDurationSec.collectAsState()
+    val hideCallsAndVoiceNotes by viewModel.isCallRecordingHidden.collectAsState()
     val folderFilterMode by viewModel.folderFilterMode.collectAsState()
     val filteredFolders by viewModel.filteredFolders.collectAsState()
     val lastFoundCount by viewModel.lastScanFoundCount.collectAsState()
@@ -250,6 +251,35 @@ fun ScanFiltersBottomSheet(
                                 inactiveTickColor = Color.White.copy(alpha = 0.3f)
                             ),
                             modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(alpha = 0.04f))
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                            .clickable { viewModel.toggleCallRecordingFilter(!hideCallsAndVoiceNotes) }
+                            .padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.RecordVoiceOver, null, tint = SoftGold, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Hide calls & voice notes", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            Text(
+                                "Detects call-recording and WhatsApp Voice Notes folders. WhatsApp Audio songs stay visible.",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Switch(
+                            checked = hideCallsAndVoiceNotes,
+                            onCheckedChange = viewModel::toggleCallRecordingFilter,
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.Black, checkedTrackColor = SoftGold)
                         )
                     }
                 }

@@ -19,5 +19,19 @@ data class ScheduledTask(
     val repeatDays: String = "", // Comma-separated: "MON,TUE,WED" or empty for one-time
     val label: String = "",
     val snoozeEnabled: Boolean = false,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** TRACK, ALBUM, FOLDER, PLAYLIST or QUEUE. */
+    val contentType: String = "TRACK",
+    /** Newline-delimited local content URIs; legacy TRACK rows fall back to songUri. */
+    val contentUris: String = "",
+    /** Zero means play until the selected content finishes. */
+    val stopAfterMinutes: Int = 0,
+    val fadeInSeconds: Int = 10,
+    val lastRunAt: Long = 0L,
+    val lastResult: String = "NEVER",
+    val activeCycleId: String = "",
+    val activeTrackIndex: Int = 0,
+    val recoveryAttempts: Int = 0,
+    val originalSystemVolume: Int = -1,
+    val nextRunAt: Long = 0L
 )

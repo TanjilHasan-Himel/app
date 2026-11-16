@@ -29,7 +29,7 @@ fun ArtistList(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         state = state,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(items = artists, key = { it.id }, contentType = { "artist" }) { artist ->

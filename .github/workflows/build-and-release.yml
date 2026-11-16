@@ -1,0 +1,133 @@
+name: Audia CI/CD - Build & Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      build_release:
+        description: 'Build Release APK (instead of Debug)?'
+        required: true
+        type: boolean
+        default: true
+      publish_release:
+        description: 'Create/Update GitHub Release with APKs?'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & Test Audia
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Make Gradlew Executable
+        run: chmod +x gradlew
+
+      - name: Run Unit Tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Decode Release Keystore (if provided in Secrets)
+        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.AUDIA_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p app/keystore
+          echo "$KEYSTORE_BASE64" | base64 --decode > app/keystore/release.keystore
+          echo "AUDIA_KEYSTORE_PATH=app/keystore/release.keystore" >> $GITHUB_ENV
+          echo "AUDIA_KEYSTORE_PASSWORD=${{ secrets.AUDIA_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+          echo "AUDIA_KEY_ALIAS=${{ secrets.AUDIA_KEY_ALIAS }}" >> $GITHUB_ENV
+          echo "AUDIA_KEY_PASSWORD=${{ secrets.AUDIA_KEY_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Determine Target Build Task
+        id: target_task
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]] || [[ "${{ inputs.build_release }}" == "true" ]]; then
+            echo "task=:app:assembleRelease" >> $GITHUB_OUTPUT
+            echo "mode=release" >> $GITHUB_OUTPUT
+          else
+            echo "task=:app:assembleDebug" >> $GITHUB_OUTPUT
+            echo "mode=debug" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build APK (${{ steps.target_task.outputs.mode }})
+        run: ./gradlew ${{ steps.target_task.outputs.task }} --no-daemon --stacktrace
+
+      - name: Prepare Release Artifacts & Permanent Alias
+        id: prepare_artifacts
+        run: |
+          MODE="${{ steps.target_task.outputs.mode }}"
+          APK_DIR="app/build/outputs/apk/${MODE}"
+          
+          # Find the generated APK matching Audia-v*.apk
+          MAIN_APK=$(find "$APK_DIR" -name "Audia-v*.apk" -type f | head -n 1)
+          
+          if [[ -z "$MAIN_APK" ]]; then
+            echo "Error: No Audia-v*.apk found in $APK_DIR!"
+            find app/build/outputs/apk -type f
+            exit 1
+          fi
+          
+          echo "Found primary APK: $MAIN_APK"
+          
+          # Create a copy named Audia-latest.apk for the permanent direct download link
+          LATEST_APK="${APK_DIR}/Audia-latest.apk"
+          cp "$MAIN_APK" "$LATEST_APK"
+          
+          echo "Created permanent alias: $LATEST_APK"
+          echo "primary_apk=$MAIN_APK" >> $GITHUB_OUTPUT
+          echo "latest_apk=$LATEST_APK" >> $GITHUB_OUTPUT
+
+      - name: Upload APKs to Workflow Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: audia-${{ steps.target_task.outputs.mode }}-apks
+          path: |
+            ${{ steps.prepare_artifacts.outputs.primary_apk }}
+            ${{ steps.prepare_artifacts.outputs.latest_apk }}
+          retention-days: 14
+
+      - name: Publish to Public GitHub Releases (TanjilHasan-Himel/app)
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: TanjilHasan-Himel/app
+          files: |
+            ${{ steps.prepare_artifacts.outputs.primary_apk }}
+            ${{ steps.prepare_artifacts.outputs.latest_apk }}
+          generate_release_notes: true
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN || secrets.GITHUB_TOKEN }}

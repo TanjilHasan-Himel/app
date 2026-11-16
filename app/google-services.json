@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "495081773118",
+    "project_id": "audia-music-player",
+    "storage_bucket": "audia-music-player.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:495081773118:android:690691167927ca0e29196f",
+        "android_client_info": {
+          "package_name": "com.eplaytime.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA1od6PhOMgVnNNB5Ok8DItFPgBekiJf3I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

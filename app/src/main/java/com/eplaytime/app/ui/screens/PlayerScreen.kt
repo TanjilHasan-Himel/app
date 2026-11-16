@@ -17,6 +17,7 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -29,8 +30,13 @@ import com.eplaytime.app.ui.components.SongWikiBottomSheet
 import com.eplaytime.app.ui.components.BounceIconButton
 import com.eplaytime.app.ui.components.bounceClick
 import com.eplaytime.app.util.LrcParser
+import com.eplaytime.app.util.FirebaseDiagnostics
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -65,6 +71,7 @@ import com.eplaytime.app.ui.components.FavoriteButton
 import com.eplaytime.app.util.VisualizerHelper
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -76,6 +83,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
@@ -100,6 +111,7 @@ import java.util.*
 import kotlin.math.abs
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.content.Intent
 import android.provider.Settings
@@ -115,7 +127,13 @@ fun PlayerScreen(
     onNavigateToQueue: () -> Unit = {},
     viewModel: MusicViewModel
 ) {
+    DisposableEffect(viewModel) {
+        viewModel.setVisualizerUiVisible(true)
+        onDispose { viewModel.setVisualizerUiVisible(false) }
+    }
+    val haptic = LocalHapticFeedback.current
     val currentSong by viewModel.currentSong.collectAsState()
+    val songList by viewModel.songList.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
     val progress by viewModel.progress.collectAsState()
     val duration by viewModel.duration.collectAsState()
@@ -133,9 +151,11 @@ fun PlayerScreen(
     val fadeOnPlayPause by viewModel.fadeOnPlayPause.collectAsState()
     val sleepTimerRemainingMs by viewModel.sleepTimerRemainingMs.collectAsState()
     val loopPresets by viewModel.loopPresetsForCurrentSong.collectAsState()
-    val bassMagnitude by viewModel.visualizerHelper.bassMagnitude.collectAsState()
-    val audioEnergy by viewModel.visualizerHelper.energy.collectAsState()
-    val isVisualizerRunning by viewModel.visualizerHelper.isRunning.collectAsState()
+    // Legacy branch placeholders. Live visualizer state is collected only by its leaf composables.
+    val bassMagnitude = 0f
+    val audioEnergy = 0f
+    val isVisualizerRunning = false
+    val audioEnergyFlow = viewModel.visualizerHelper.energy
     var showLoopPresetsSheet by remember { mutableStateOf(false) }
     var showSleepDialog by remember { mutableStateOf(false) }
     var showStopDialog by remember { mutableStateOf(false) }
@@ -148,6 +168,45 @@ fun PlayerScreen(
     val currentLyrics by viewModel.currentLyrics.collectAsState()
     val lyrics = currentLyrics
     val isLyricsLoading by viewModel.isLyricsLoading.collectAsState()
+    val lyricsCandidates by viewModel.lyricsCandidates.collectAsState()
+
+    if (lyricsCandidates.isNotEmpty() && currentSong != null) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissLyricsCandidates,
+            title = { Text("Choose the matching lyrics", fontFamily = OutfitFontFamily) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    lyricsCandidates.take(8).forEach { candidate ->
+                        TextButton(
+                            onClick = { viewModel.selectLyricsCandidate(currentSong!!, candidate) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(candidate.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    "${candidate.artist} • ${candidate.durationSeconds / 60}:${(candidate.durationSeconds % 60).toString().padStart(2, '0')}",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissLyricsCandidates) { Text("Cancel") }
+            }
+        )
+    }
 
     var showSongGarageSheet by remember { mutableStateOf(false) }
     var showSongWikiSheet by remember { mutableStateOf(false) }
@@ -209,6 +268,9 @@ fun PlayerScreen(
     }
 
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        FirebaseDiagnostics.recordScreen(context, "PlayerScreen")
+    }
     
     // Gallery picker launcher for long-press cover artwork customization
     val galleryPickerLauncher = rememberLauncherForActivityResult(
@@ -346,8 +408,7 @@ fun PlayerScreen(
         AmbientGlowVisualizer(
             primaryColor = animatedAccentColor,
             secondaryColor = animatedSecondaryColor,
-            bassMagnitude = bassMagnitude,
-            audioEnergy = audioEnergy,
+            visualizerHelper = viewModel.visualizerHelper,
             isPlaying = isPlaying,
             isZenMode = isZenModeEnabled,
             modifier = Modifier.fillMaxSize()
@@ -387,6 +448,77 @@ fun PlayerScreen(
                 onExitZen = { isZenModeEnabled = false }
             )
         } else {
+            AdaptiveImmersivePlayer(
+                song = currentSong!!,
+                albumArtModel = albumArtModel,
+                previousArtwork = songList.indexOfFirst { it.uri == currentSong?.uri }
+                    .takeIf { it >= 0 }?.let { songList.getOrNull(it - 1)?.albumArtUri },
+                nextArtwork = songList.indexOfFirst { it.uri == currentSong?.uri }
+                    .takeIf { it >= 0 }?.let { songList.getOrNull(it + 1)?.albumArtUri },
+                isPlaying = isPlaying,
+                audioEnergyFlow = audioEnergyFlow,
+                progress = progress,
+                duration = duration,
+                accentColor = animatedAccentColor,
+                lyrics = lyrics,
+                isLyricsLoading = isLyricsLoading,
+                shuffleEnabled = shuffleEnabled,
+                repeatMode = repeatMode,
+                playbackSpeed = playbackSpeed,
+                loopStart = loopStart,
+                loopEnd = loopEnd,
+                loopEnabled = loopEnabled,
+                isFavorite = allFavorites.any { it.uri == currentSong?.uri },
+                sleepTimerActive = sleepTimerRemainingMs != null,
+                seekFeedback = seekRippleText,
+                seekFeedbackForward = seekRippleIsForward,
+                onDismiss = onNavigateBack,
+                onSeek = viewModel::seekTo,
+                onSideSeek = triggerSideSeek,
+                onPrevious = {
+                    FirebaseDiagnostics.recordAction(context, "skip_previous")
+                    viewModel.playPrevious()
+                },
+                onPlayPause = {
+                    FirebaseDiagnostics.recordAction(context, "play_pause_toggle", if (isPlaying) "pause" else "play")
+                    viewModel.togglePlayPause()
+                },
+                onNext = {
+                    FirebaseDiagnostics.recordAction(context, "skip_next")
+                    viewModel.playNext()
+                },
+                onSwipePrevious = viewModel::playPrevious,
+                onSwipeNext = viewModel::playNext,
+                onOpenWiki = {
+                    currentSong?.let {
+                        viewModel.loadSongWiki(it)
+                        showSongWikiSheet = true
+                    }
+                },
+                onToggleShuffle = {
+                    viewModel.toggleShuffle()
+                },
+                onCycleRepeat = {
+                    viewModel.cycleRepeatMode()
+                },
+                onToggleFavorite = {
+                    currentSong?.let(viewModel::toggleFavorite)
+                },
+                onToggleLoop = viewModel::toggleABLoop,
+                onOpenLoopPresets = { showLoopPresetsSheet = true },
+                onCycleSpeed = viewModel::cyclePlaybackSpeed,
+                onOpenSleepTimer = { showSleepDialog = true },
+                onOpenEqualizer = {
+                    viewModel.requestAudioSessionId()
+                    showAudioEffectsSheet = true
+                },
+                onOpenGarage = { showSongGarageSheet = true },
+                onOpenQueue = onNavigateToQueue,
+                onOpenZen = { isZenModeEnabled = true },
+                onRetryLyrics = { viewModel.retryLyricsForSong(currentSong) },
+                onChangeArtwork = { galleryPickerLauncher.launch("image/*") }
+            )
+            if (false) {
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
@@ -503,7 +635,6 @@ fun PlayerScreen(
                                     onClick = {
                                         currentSong?.let {
                                             viewModel.toggleFavorite(it)
-                                            viewModel.showInAppNotification(if (isFavInCapsule) "Removed from Favorites" else "Added to Favorites ❤️")
                                         }
                                     },
                                     modifier = Modifier.size(32.dp)
@@ -670,7 +801,7 @@ fun PlayerScreen(
                                     isLoading = isLyricsLoading,
                                     currentPositionMs = progress,
                                     onSeekTo = { viewModel.seekTo(it) },
-                                    onRetry = { currentSong?.let { viewModel.loadLyricsForSong(it) } },
+                                    onRetry = { viewModel.retryLyricsForSong(currentSong) },
                                     accentColor = animatedAccentColor,
                                     modifier = Modifier.fillMaxSize()
                                 )
@@ -1117,7 +1248,6 @@ fun PlayerScreen(
                             BounceIconButton(
                                 onClick = {
                                     viewModel.toggleShuffle()
-                                    viewModel.showInAppNotification(if (!shuffleEnabled) "Shuffle Enabled" else "Shuffle Disabled")
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
@@ -1133,12 +1263,6 @@ fun PlayerScreen(
                             BounceIconButton(
                                 onClick = {
                                     viewModel.cycleRepeatMode()
-                                    val nextMode = when (repeatMode) {
-                                        Player.REPEAT_MODE_OFF -> "Repeat All"
-                                        Player.REPEAT_MODE_ALL -> "Repeat One"
-                                        else -> "Repeat Off"
-                                    }
-                                    viewModel.showInAppNotification(nextMode)
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
@@ -1156,7 +1280,6 @@ fun PlayerScreen(
                                 onClick = {
                                     currentSong?.let {
                                         viewModel.toggleFavorite(it)
-                                        viewModel.showInAppNotification(if (isFavorite) "Removed from Favorites" else "Added to Favorites ❤️")
                                     }
                                 },
                                 modifier = Modifier.size(36.dp)
@@ -1180,12 +1303,6 @@ fun PlayerScreen(
                             BounceIconButton(
                                 onClick = {
                                     viewModel.toggleABLoop()
-                                    val msg = when {
-                                        loopEnabled -> "A-B Loop Cleared"
-                                        loopStart != null -> "Loop End (B) Set • Long-press A-B to view saved presets"
-                                        else -> "Loop Start (A) Set"
-                                    }
-                                    viewModel.showInAppNotification(msg)
                                 },
                                 onLongClick = { showLoopPresetsSheet = true },
                                 modifier = Modifier.size(36.dp)
@@ -1213,16 +1330,6 @@ fun PlayerScreen(
                             BounceIconButton(
                                 onClick = {
                                     viewModel.cyclePlaybackSpeed()
-                                    val speedStr = when (playbackSpeed) {
-                                        1.0f -> "1.25x"
-                                        1.25f -> "1.5x"
-                                        1.5f -> "2.0x"
-                                        2.0f -> "0.5x"
-                                        0.5f -> "0.75x"
-                                        0.75f -> "1.0x"
-                                        else -> "1.0x"
-                                    }
-                                    viewModel.showInAppNotification("Speed: $speedStr")
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
@@ -1383,7 +1490,14 @@ fun PlayerScreen(
                                 )
                                 .clip(dynamicShape)
                                 .background(animatedAccentColor)
-                                .bounceClick(scaleDown = 0.90f) { viewModel.togglePlayPause() },
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    role = Role.Button
+                                ) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.togglePlayPause()
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             if (isPlaying) {
@@ -1394,9 +1508,8 @@ fun PlayerScreen(
                                     modifier = Modifier.size(34.dp)
                                 )
                             } else {
-                                // App's White Audia Triple-Arch Brand Logo
                                 Icon(
-                                    painter = painterResource(R.drawable.icon),
+                                    imageVector = Icons.Default.PlayArrow,
                                     contentDescription = "Play",
                                     tint = Color.White,
                                     modifier = Modifier.size(36.dp)
@@ -1452,6 +1565,7 @@ fun PlayerScreen(
 
                 Spacer(modifier = Modifier.height(4.dp))
             }
+            }
         }
     }
 
@@ -1503,6 +1617,7 @@ fun PlayerScreen(
                 confirmButton = {
                     TextButton(onClick = {
                         val mins = sleepMinutesInput.toIntOrNull()?.coerceAtLeast(1) ?: 30
+                        FirebaseDiagnostics.recordAction(context, "start_sleep_timer", "${mins}m")
                         viewModel.startSleepTimer(minutes = mins, fadeOut = true)
                         showSleepDialog = false
                     }) { Text("Start Timer") }
@@ -1510,6 +1625,7 @@ fun PlayerScreen(
                 dismissButton = {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = {
+                            FirebaseDiagnostics.recordAction(context, "cancel_sleep_timer")
                             viewModel.cancelSleepTimer()
                             if (viewModel.stopAfterCurrentSong.value) viewModel.toggleStopAfterCurrentSong()
                             showSleepDialog = false
@@ -1574,6 +1690,664 @@ fun PlayerScreen(
                 }
             )
         }
+    }
+}
+
+@Composable
+private fun AdaptiveImmersivePlayer(
+    song: Song,
+    albumArtModel: Any,
+    previousArtwork: String?,
+    nextArtwork: String?,
+    isPlaying: Boolean,
+    audioEnergyFlow: kotlinx.coroutines.flow.StateFlow<Float>,
+    progress: Long,
+    duration: Long,
+    accentColor: Color,
+    lyrics: ParsedLyrics?,
+    isLyricsLoading: Boolean,
+    shuffleEnabled: Boolean,
+    repeatMode: Int,
+    playbackSpeed: Float,
+    loopStart: Long?,
+    loopEnd: Long?,
+    loopEnabled: Boolean,
+    isFavorite: Boolean,
+    sleepTimerActive: Boolean,
+    seekFeedback: String?,
+    seekFeedbackForward: Boolean,
+    onDismiss: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onSideSeek: (Boolean) -> Unit,
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onSwipePrevious: () -> Unit,
+    onSwipeNext: () -> Unit,
+    onOpenWiki: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onToggleLoop: () -> Unit,
+    onOpenLoopPresets: () -> Unit,
+    onCycleSpeed: () -> Unit,
+    onOpenSleepTimer: () -> Unit,
+    onOpenEqualizer: () -> Unit,
+    onOpenGarage: () -> Unit,
+    onOpenQueue: () -> Unit,
+    onOpenZen: () -> Unit,
+    onRetryLyrics: () -> Unit,
+    onChangeArtwork: () -> Unit
+) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+    ) {
+        val landscape = maxWidth > maxHeight
+        val compact = !landscape && maxHeight < 740.dp
+        // Width preserves the portrait artwork feel; available height protects lyrics space.
+        val heroHeight = if (landscape) {
+            (maxHeight - 16.dp).coerceAtLeast(280.dp)
+        } else {
+            minOf(maxWidth * 1.12f, maxHeight * 0.52f).coerceIn(350.dp, 500.dp)
+        }
+        val pagerState = rememberPagerState(pageCount = { 2 })
+        val scope = rememberCoroutineScope()
+
+        val horizontalPadding = if (maxWidth < 360.dp) 12.dp else 16.dp
+        val contentModifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = horizontalPadding, vertical = 8.dp)
+
+        if (landscape) {
+            Row(
+                modifier = contentModifier,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.weight(0.44f)) {
+                    ImmersiveHeroCover(
+                        song, albumArtModel, previousArtwork, nextArtwork, heroHeight, false,
+                        isPlaying, audioEnergyFlow, progress, duration, accentColor, loopStart, loopEnd,
+                        seekFeedback, seekFeedbackForward, onDismiss,
+                        { scope.launch { pagerState.animateScrollToPage(1) } }, onSeek, onSideSeek,
+                        onPrevious, onPlayPause, onNext, onSwipePrevious, onSwipeNext, onOpenWiki,
+                        shuffleEnabled, isFavorite, onToggleShuffle, onToggleFavorite, onChangeArtwork
+                    )
+                }
+                VerticalPlaybackDeck(
+                    isPlaying = isPlaying,
+                    audioEnergyFlow = audioEnergyFlow,
+                    accentColor = accentColor,
+                    onPrevious = onPrevious,
+                    onPlayPause = onPlayPause,
+                    onNext = onNext
+                )
+                PlayerContentPager(
+                    pagerState, lyrics, isLyricsLoading, progress, accentColor, shuffleEnabled,
+                    repeatMode, playbackSpeed, loopStart, loopEnabled, isFavorite, sleepTimerActive,
+                    { scope.launch { pagerState.animateScrollToPage(it) } }, onSeek, onRetryLyrics,
+                    onToggleShuffle, onCycleRepeat, onToggleFavorite, onToggleLoop,
+                    onOpenLoopPresets, onCycleSpeed, onOpenSleepTimer, onOpenEqualizer,
+                    onOpenGarage, onOpenQueue, onOpenZen,
+                    modifier = Modifier.weight(0.56f)
+                )
+            }
+        } else Column(
+            modifier = contentModifier,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            ImmersiveHeroCover(
+                song = song,
+                albumArtModel = albumArtModel,
+                previousArtwork = previousArtwork,
+                nextArtwork = nextArtwork,
+                height = heroHeight,
+                compact = compact,
+                isPlaying = isPlaying,
+                audioEnergyFlow = audioEnergyFlow,
+                progress = progress,
+                duration = duration,
+                accentColor = accentColor,
+                loopStart = loopStart,
+                loopEnd = loopEnd,
+                seekFeedback = seekFeedback,
+                seekFeedbackForward = seekFeedbackForward,
+                onDismiss = onDismiss,
+                onOverflow = { scope.launch { pagerState.animateScrollToPage(1) } },
+                onSeek = onSeek,
+                onSideSeek = onSideSeek,
+                onPrevious = onPrevious,
+                onPlayPause = onPlayPause,
+                onNext = onNext,
+                onSwipePrevious = onSwipePrevious,
+                onSwipeNext = onSwipeNext,
+                onOpenWiki = onOpenWiki,
+                shuffleEnabled = shuffleEnabled,
+                isFavorite = isFavorite,
+                onToggleShuffle = onToggleShuffle,
+                onToggleFavorite = onToggleFavorite,
+                onChangeArtwork = onChangeArtwork
+            )
+
+            if (!compact) {
+                Spacer(Modifier.height(10.dp))
+                PrimaryPlaybackDeck(
+                    isPlaying = isPlaying,
+                    audioEnergyFlow = audioEnergyFlow,
+                    accentColor = accentColor,
+                    onSeekBack = { onSeek((progress - 5_000L).coerceAtLeast(0L)) },
+                    onPrevious = onPrevious,
+                    onPlayPause = onPlayPause,
+                    onNext = onNext,
+                    onSeekForward = { onSeek((progress + 5_000L).coerceAtMost(duration)) }
+                )
+                Spacer(Modifier.height(8.dp))
+            } else {
+                Spacer(Modifier.height(6.dp))
+            }
+
+            PlayerContentPager(
+                pagerState = pagerState,
+                lyrics = lyrics,
+                isLyricsLoading = isLyricsLoading,
+                progress = progress,
+                accentColor = accentColor,
+                shuffleEnabled = shuffleEnabled,
+                repeatMode = repeatMode,
+                playbackSpeed = playbackSpeed,
+                loopStart = loopStart,
+                loopEnabled = loopEnabled,
+                isFavorite = isFavorite,
+                sleepTimerActive = sleepTimerActive,
+                onSelectPage = { scope.launch { pagerState.animateScrollToPage(it) } },
+                onSeek = onSeek,
+                onRetryLyrics = onRetryLyrics,
+                onToggleShuffle = onToggleShuffle,
+                onCycleRepeat = onCycleRepeat,
+                onToggleFavorite = onToggleFavorite,
+                onToggleLoop = onToggleLoop,
+                onOpenLoopPresets = onOpenLoopPresets,
+                onCycleSpeed = onCycleSpeed,
+                onOpenSleepTimer = onOpenSleepTimer,
+                onOpenEqualizer = onOpenEqualizer,
+                onOpenGarage = onOpenGarage,
+                onOpenQueue = onOpenQueue,
+                onOpenZen = onOpenZen,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun VerticalPlaybackDeck(
+    isPlaying: Boolean,
+    audioEnergyFlow: kotlinx.coroutines.flow.StateFlow<Float>,
+    accentColor: Color,
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit
+) {
+    Column(
+        modifier = Modifier.width(72.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        PlaybackIcon(Icons.Default.SkipPrevious, "Previous track", onPrevious, 28.dp)
+        AudiaPlayPause(isPlaying, audioEnergyFlow, accentColor, onPlayPause)
+        PlaybackIcon(Icons.Default.SkipNext, "Next track", onNext, 28.dp)
+    }
+}
+
+@Composable
+private fun ImmersiveHeroCover(
+    song: Song,
+    albumArtModel: Any,
+    previousArtwork: String?,
+    nextArtwork: String?,
+    height: androidx.compose.ui.unit.Dp,
+    compact: Boolean,
+    isPlaying: Boolean,
+    audioEnergyFlow: kotlinx.coroutines.flow.StateFlow<Float>,
+    progress: Long,
+    duration: Long,
+    accentColor: Color,
+    loopStart: Long?,
+    loopEnd: Long?,
+    seekFeedback: String?,
+    seekFeedbackForward: Boolean,
+    onDismiss: () -> Unit,
+    onOverflow: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onSideSeek: (Boolean) -> Unit,
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onSwipePrevious: () -> Unit,
+    onSwipeNext: () -> Unit,
+    onOpenWiki: () -> Unit,
+    shuffleEnabled: Boolean,
+    isFavorite: Boolean,
+    onToggleShuffle: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onChangeArtwork: () -> Unit
+) {
+    var horizontalDrag by remember { mutableFloatStateOf(0f) }
+    val shape = RoundedCornerShape(30.dp)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(shape)
+            .background(Color(0xFF111111))
+            .pointerInput(song.id) {
+                detectHorizontalDragGestures(
+                    onDragStart = { horizontalDrag = 0f },
+                    onHorizontalDrag = { _, amount -> horizontalDrag += amount },
+                    onDragEnd = {
+                        when {
+                            horizontalDrag > 90f -> onSwipePrevious()
+                            horizontalDrag < -90f -> onSwipeNext()
+                        }
+                        horizontalDrag = 0f
+                    },
+                    onDragCancel = { horizontalDrag = 0f }
+                )
+            }
+            .pointerInput(song.id, progress, duration) {
+                detectTapGestures(
+                    onDoubleTap = { position -> onSideSeek(position.x > size.width / 2f) },
+                    onLongPress = { onChangeArtwork() }
+                )
+            }
+    ) {
+        if (horizontalDrag != 0f) {
+            AsyncImage(
+                model = (if (horizontalDrag > 0f) previousArtwork else nextArtwork) ?: R.drawable.audia_player_logo,
+                contentDescription = if (horizontalDrag > 0f) "Previous track preview" else "Next track preview",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        AsyncImage(
+            model = albumArtModel,
+            contentDescription = "${song.title} album artwork",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = horizontalDrag * 0.55f
+                    rotationZ = horizontalDrag / size.width * 2.5f
+                    scaleX = 1f - (kotlin.math.abs(horizontalDrag) / size.width).coerceAtMost(0.04f)
+                    scaleY = scaleX
+                }
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.48f),
+                        0.34f to Color.Transparent,
+                        0.62f to Color.Black.copy(alpha = 0.16f),
+                        1f to Color.Black.copy(alpha = 0.92f)
+                    )
+                )
+        )
+
+        BounceIconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopStart).padding(8.dp).size(48.dp)) {
+            Icon(Icons.Default.KeyboardArrowDown, "Minimize player", tint = Color.White, modifier = Modifier.size(30.dp))
+        }
+        Text(
+            "NOW PLAYING",
+            color = Color.White.copy(alpha = 0.88f),
+            fontFamily = OutfitFontFamily,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 2.4.sp,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 23.dp)
+        )
+        BounceIconButton(onClick = onOverflow, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(48.dp)) {
+            Icon(Icons.Default.MoreVert, "More player options", tint = Color.White, modifier = Modifier.size(25.dp))
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clickable(onClick = onOpenWiki)
+                ) {
+                    MarqueeTitleText(
+                        text = song.title,
+                        fontSize = if (compact) 22.sp else 25.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        alignStart = true,
+                        initialDelayMillis = 1800
+                    )
+                    Text(
+                        song.artist.ifBlank { "Unknown Artist" },
+                        color = Color.White.copy(alpha = 0.76f),
+                        fontFamily = OutfitFontFamily,
+                        fontSize = if (compact) 14.sp else 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                BounceIconButton(onClick = onToggleShuffle, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        Icons.Default.Shuffle,
+                        "Shuffle",
+                        tint = if (shuffleEnabled) accentColor else Color.White.copy(alpha = 0.64f),
+                        modifier = Modifier.size(21.dp)
+                    )
+                }
+                BounceIconButton(onClick = onToggleFavorite, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        if (isFavorite) "Remove favorite" else "Add favorite",
+                        tint = if (isFavorite) Color(0xFFFF5B73) else Color.White.copy(alpha = 0.64f),
+                        modifier = Modifier.size(21.dp)
+                    )
+                }
+            }
+            Box(Modifier.fillMaxWidth()) {
+                PremiumProgressBar(
+                    progress = progress,
+                    duration = duration,
+                    loopA = loopStart,
+                    loopB = loopEnd,
+                    onSeek = onSeek,
+                    accentColor = accentColor,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(formatDurationFull(progress), color = Color.White.copy(alpha = 0.72f), fontSize = 12.sp)
+                Text("-${formatDurationFull((duration - progress).coerceAtLeast(0L))}", color = Color.White.copy(alpha = 0.72f), fontSize = 12.sp)
+            }
+            if (compact) {
+                PrimaryPlaybackDeck(
+                    isPlaying = isPlaying,
+                    audioEnergyFlow = audioEnergyFlow,
+                    accentColor = accentColor,
+                    onSeekBack = { onSeek((progress - 5_000L).coerceAtLeast(0L)) },
+                    onPrevious = onPrevious,
+                    onPlayPause = onPlayPause,
+                    onNext = onNext,
+                    onSeekForward = { onSeek((progress + 5_000L).coerceAtMost(duration)) },
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+
+        if (seekFeedback != null) {
+            Text(
+                if (seekFeedbackForward) "$seekFeedback »" else "« $seekFeedback",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .align(if (seekFeedbackForward) Alignment.CenterEnd else Alignment.CenterStart)
+                    .padding(24.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color.Black.copy(alpha = 0.72f))
+                    .padding(horizontal = 14.dp, vertical = 9.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PrimaryPlaybackDeck(
+    isPlaying: Boolean,
+    audioEnergyFlow: kotlinx.coroutines.flow.StateFlow<Float>,
+    accentColor: Color,
+    onSeekBack: () -> Unit,
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onSeekForward: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PlaybackIcon(Icons.Default.Replay5, "Seek back 5 seconds", onSeekBack)
+        PlaybackIcon(Icons.Default.SkipPrevious, "Previous track", onPrevious, 30.dp)
+        AudiaPlayPause(isPlaying, audioEnergyFlow, accentColor, onPlayPause)
+        PlaybackIcon(Icons.Default.SkipNext, "Next track", onNext, 30.dp)
+        PlaybackIcon(Icons.Default.Forward5, "Seek forward 5 seconds", onSeekForward)
+    }
+}
+
+@Composable
+private fun PlaybackIcon(icon: ImageVector, description: String, onClick: () -> Unit, size: androidx.compose.ui.unit.Dp = 24.dp) {
+    BounceIconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
+        Icon(icon, description, tint = Color.White.copy(alpha = 0.88f), modifier = Modifier.size(size))
+    }
+}
+
+@Composable
+private fun AudiaPlayPause(
+    isPlaying: Boolean,
+    audioEnergyFlow: kotlinx.coroutines.flow.StateFlow<Float>,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.9f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "audiaPlayPress"
+    )
+    val bottomCorner by animateDpAsState(if (isPlaying) 32.dp else 16.dp, label = "audiaPlayShape")
+    val shape = RoundedCornerShape(32.dp, 32.dp, bottomCorner, bottomCorner)
+    val buttonColor = if (accentColor == Color.Unspecified || accentColor.alpha < 0.2f) SoftGold else accentColor
+    val isLightBackground = (0.299f * buttonColor.red + 0.587f * buttonColor.green + 0.114f * buttonColor.blue) > 0.45f
+    val iconTint = if (isLightBackground) Color(0xFF121318) else Color.White
+
+    Box(
+        modifier = Modifier
+            .size(64.dp)
+            .scale(pressScale)
+            .clip(shape)
+            .background(buttonColor)
+            .border(1.dp, Color.White.copy(alpha = 0.25f), shape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Button,
+                onClickLabel = if (isPlaying) "Pause" else "Play"
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+            contentDescription = if (isPlaying) "Pause" else "Play",
+            tint = iconTint,
+            modifier = Modifier.size(34.dp)
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PlayerContentPager(
+    pagerState: androidx.compose.foundation.pager.PagerState,
+    lyrics: ParsedLyrics?,
+    isLyricsLoading: Boolean,
+    progress: Long,
+    accentColor: Color,
+    shuffleEnabled: Boolean,
+    repeatMode: Int,
+    playbackSpeed: Float,
+    loopStart: Long?,
+    loopEnabled: Boolean,
+    isFavorite: Boolean,
+    sleepTimerActive: Boolean,
+    onSelectPage: (Int) -> Unit,
+    onSeek: (Long) -> Unit,
+    onRetryLyrics: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onToggleLoop: () -> Unit,
+    onOpenLoopPresets: () -> Unit,
+    onCycleSpeed: () -> Unit,
+    onOpenSleepTimer: () -> Unit,
+    onOpenEqualizer: () -> Unit,
+    onOpenGarage: () -> Unit,
+    onOpenQueue: () -> Unit,
+    onOpenZen: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            listOf("Lyrics", "Tools").forEachIndexed { index, label ->
+                TextButton(onClick = { onSelectPage(index) }) {
+                    Text(
+                        label,
+                        color = if (pagerState.currentPage == index) Color.White else Color.White.copy(alpha = 0.46f),
+                        fontWeight = if (pagerState.currentPage == index) FontWeight.SemiBold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            if (page == 0) {
+                when {
+                    lyrics != null && lyrics.lines.isNotEmpty() -> LyricsView(
+                        lyrics = lyrics,
+                        isLoading = isLyricsLoading,
+                        currentPositionMs = progress,
+                        onSeekTo = onSeek,
+                        onRetry = onRetryLyrics,
+                        accentColor = accentColor,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    isLyricsLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = accentColor, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    }
+                    else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        TextButton(onClick = onRetryLyrics) { Text("Find lyrics", color = Color.White) }
+                    }
+                }
+            } else {
+                PlayerToolsGrid(
+                    accentColor, shuffleEnabled, repeatMode, playbackSpeed, loopStart, loopEnabled,
+                    isFavorite, sleepTimerActive, onToggleShuffle, onCycleRepeat, onToggleFavorite,
+                    onToggleLoop, onOpenLoopPresets, onCycleSpeed, onOpenSleepTimer, onOpenEqualizer,
+                    onOpenGarage, onOpenQueue, onOpenZen
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlayerToolsGrid(
+    accentColor: Color,
+    shuffleEnabled: Boolean,
+    repeatMode: Int,
+    playbackSpeed: Float,
+    loopStart: Long?,
+    loopEnabled: Boolean,
+    isFavorite: Boolean,
+    sleepTimerActive: Boolean,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onToggleLoop: () -> Unit,
+    onOpenLoopPresets: () -> Unit,
+    onCycleSpeed: () -> Unit,
+    onOpenSleepTimer: () -> Unit,
+    onOpenEqualizer: () -> Unit,
+    onOpenGarage: () -> Unit,
+    onOpenQueue: () -> Unit,
+    onOpenZen: () -> Unit
+) {
+    val tools = listOf(
+        Triple(
+            if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+            when (repeatMode) {
+                Player.REPEAT_MODE_ONE -> "Repeat 1"
+                Player.REPEAT_MODE_ALL -> "Repeat all"
+                else -> "Repeat"
+            },
+            repeatMode != Player.REPEAT_MODE_OFF
+        ) to onCycleRepeat,
+        Triple(Icons.Default.Loop, if (loopStart != null && !loopEnabled) "Set B" else "A–B loop", loopStart != null) to onToggleLoop,
+        Triple(Icons.Default.Bookmarks, "Saved loops", false) to onOpenLoopPresets,
+        Triple(Icons.Default.Speed, "${playbackSpeed}×", playbackSpeed != 1f) to onCycleSpeed,
+        Triple(Icons.Default.Timer, "Sleep", sleepTimerActive) to onOpenSleepTimer,
+        Triple(Icons.Default.Tune, "Equalizer", false) to onOpenEqualizer,
+        Triple(Icons.Default.Build, "Garage", false) to onOpenGarage,
+        Triple(Icons.AutoMirrored.Filled.QueueMusic, "Queue", false) to onOpenQueue,
+        Triple(Icons.Default.Brightness3, "Zen", false) to onOpenZen
+    )
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        tools.chunked(3).forEach { rowTools ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                rowTools.forEach { (tool, action) ->
+                    val (icon, label, active) = tool
+                    PlayerTool(icon, label, active, accentColor, action, if (label.contains("loop", true) || label == "Set B") onOpenLoopPresets else null, Modifier.weight(1f))
+                }
+                repeat(3 - rowTools.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PlayerTool(
+    icon: ImageVector,
+    label: String,
+    active: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .heightIn(min = 64.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = if (active) 0.10f else 0.045f))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 8.dp, vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(icon, label, tint = if (active) accentColor else Color.White.copy(alpha = 0.72f), modifier = Modifier.size(21.dp))
+        Spacer(Modifier.height(4.dp))
+        Text(label, color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -1686,6 +2460,7 @@ fun ZenModeView(
     onNext: () -> Unit,
     onExitZen: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     val calendar = Calendar.getInstance()
     val timeFormat = remember { java.text.SimpleDateFormat("hh:mm", Locale.US) }
     val amPmFormat = remember { java.text.SimpleDateFormat("a", Locale.US) }
@@ -1931,23 +2706,30 @@ fun ZenModeView(
                     )
                 }
 
+                val zenButtonColor = if (animatedAccentColor == Color.Unspecified || animatedAccentColor.alpha < 0.2f) SoftGold else animatedAccentColor
+                val zenLightBg = (0.299f * zenButtonColor.red + 0.587f * zenButtonColor.green + 0.114f * zenButtonColor.blue) > 0.45f
+                val zenIconTint = if (zenLightBg) Color(0xFF121318) else Color.White
                 Box(
                     modifier = Modifier
                         .size(66.dp)
                         .clip(CircleShape)
-                        .background(
-                            Brush.radialGradient(
-                                listOf(zenGlowColor.copy(alpha = 0.35f), Color.White.copy(alpha = 0.12f))
-                            )
-                        )
-                        .border(1.5.dp, zenGlowColor.copy(alpha = 0.6f), CircleShape)
-                        .bounceClick(scaleDown = 0.85f) { onPlayPause() },
+                        .background(zenButtonColor)
+                        .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            role = Role.Button,
+                            onClickLabel = if (isPlaying) "Pause" else "Play"
+                        ) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onPlayPause()
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = "Play/Pause",
-                        tint = Color.White,
+                        tint = zenIconTint,
                         modifier = Modifier.size(34.dp)
                     )
                 }

@@ -108,57 +108,13 @@ class MusicRepository @Inject constructor(
             }
         }
         
-        val effectiveMinDurationMs = if (minDurationSec > 0) minDurationSec * 1000L else if (filterShortAudio) 30000L else 0L
-        val normalizedFilterPaths = filteredFolders
-            .filter { it.isNotBlank() }
-            .map { it.lowercase().replace('\\', '/').trimEnd('/') }
-
-        // 2. Apply Filters in Memory with multi-field deep matching
-        val filteredSongs = allSongs.filter { song ->
-            var include = true
-            
-            // Filter Short Audio (configurable duration threshold)
-            if (effectiveMinDurationMs > 0L && (song.duration < effectiveMinDurationMs || song.duration <= 0L)) {
-                include = false
-            }
-            
-            // Filter Call Recordings & Voice Memos (inspect folderPath, bucket, title)
-            if (include && filterCallRecordings) {
-                val path = song.folderPath.lowercase()
-                val bucket = song.bucketDisplayName.lowercase()
-                val title = song.title.lowercase()
-                val isCallOrVoice = path.contains("/call") || path.contains("call_") ||
-                    path.contains("/record") || path.contains("voice") ||
-                    path.contains("whatsapp") || path.contains("audio record") ||
-                    bucket.contains("call") || bucket.contains("record") ||
-                    bucket.contains("voice") || bucket.contains("whatsapp") ||
-                    title.startsWith("call_") || title.startsWith("recording_") || title.startsWith("voice ") ||
-                    title.startsWith("rec_") || title.startsWith("aud-")
-                if (isCallOrVoice) {
-                    include = false
-                }
-            }
-
-            // Folder Filter Mode: Exclude vs Include only
-            if (include && normalizedFilterPaths.isNotEmpty()) {
-                val songPath = song.folderPath.lowercase().replace('\\', '/')
-                val matchesFolder = normalizedFilterPaths.any { folder ->
-                    songPath.startsWith(folder) || songPath.contains("/$folder/") || songPath.contains(folder)
-                }
-
-                if (folderFilterMode.equals("INCLUDE", ignoreCase = true)) {
-                    if (!matchesFolder) {
-                        include = false
-                    }
-                } else {
-                    if (matchesFolder) {
-                        include = false
-                    }
-                }
-            }
-
-            include
-        }
+        val filteredSongs = MusicScanFilter.apply(
+            songs = allSongs,
+            minDurationSec = if (minDurationSec > 0) minDurationSec else if (filterShortAudio) 30 else 0,
+            hideCallsAndVoiceNotes = filterCallRecordings,
+            folderMode = folderFilterMode,
+            folders = filteredFolders
+        )
 
         _songs.value = filteredSongs
         filteredSongs
@@ -178,8 +134,7 @@ class MusicRepository @Inject constructor(
         val freshSongs = scanFromMediaStore()
         Log.d(TAG, "Scanned ${freshSongs.size} songs from MediaStore. Updating Database...")
         
-        songDao.deleteAll()
-        songDao.insertAll(freshSongs)
+        songDao.replaceAll(freshSongs)
         
         // Refresh exposed flow with filters applied
         val filtered = getAllSongs(
@@ -200,7 +155,7 @@ class MusicRepository @Inject constructor(
      * Check if there are changes in MediaStore vs Database
      */
     suspend fun checkForChanges(): Boolean = withContext(Dispatchers.IO) {
-        val dbCount = songDao.getAllSongs().size
+        val dbCount = songDao.countSongs()
         var mediaStoreCount = 0
         try {
             val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI

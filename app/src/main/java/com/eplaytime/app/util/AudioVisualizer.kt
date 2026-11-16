@@ -27,8 +27,8 @@ class VisualizerHelper {
     private var smoothedEnergy = 0f
 
     // Normalized frequency bands (0.0 to 1.0)
-    private val _waveform = MutableStateFlow<List<Float>>(emptyList())
-    val waveform: StateFlow<List<Float>> = _waveform.asStateFlow()
+    private val _waveform = MutableStateFlow(FloatArray(0))
+    val waveform: StateFlow<FloatArray> = _waveform.asStateFlow()
 
     // Real-time bass magnitude (0.0 to 1.0) with fast-attack, smooth-decay physics
     private val _bassMagnitude = MutableStateFlow(0f)
@@ -78,7 +78,7 @@ class VisualizerHelper {
                                 }
 
                                 val captureSize = min(n, 64)
-                                val output = ArrayList<Float>(captureSize)
+                                val output = FloatArray(captureSize)
 
                                 var bassSum = 0f
                                 var bassCount = 0
@@ -90,7 +90,7 @@ class VisualizerHelper {
                                     val magnitude = (hypot(rfk, ifk) / 128f).coerceIn(0f, 1.5f)
 
                                     smoothedData[i] = smoothedData[i] * 0.80f + magnitude * 0.20f
-                                    output.add(smoothedData[i])
+                                    output[i] = smoothedData[i]
 
                                     if (i in 1..7) {
                                         bassSum += magnitude
@@ -114,7 +114,7 @@ class VisualizerHelper {
                                 _energy.value = smoothedEnergy
                             }
                         }
-                    }, Visualizer.getMaxCaptureRate() / 2, false, true)
+                    }, minOf(Visualizer.getMaxCaptureRate() / 2, 20_000), false, true)
 
                     enabled = true
                 }
@@ -159,20 +159,20 @@ class VisualizerHelper {
                 smoothedEnergy = smoothedEnergy * 0.85f + targetEnergy * 0.15f
 
                 // Generate 48 simulated spectrum bands
-                val bands = ArrayList<Float>(48)
+                val bands = FloatArray(48)
                 for (b in 0 until 48) {
                     val bandFreq = (b.toFloat() / 48f)
                     val freqFactor = exp(-bandFreq * 1.8f) // Natural audio roll-off
                     val wobble = sin(step * (1.2f + b * 0.05f) + b * 0.4f) * 0.25f
                     val amp = ((smoothedBass * freqFactor + wobble + 0.1f) * (1f - bandFreq * 0.4f)).coerceIn(0.05f, 1.0f)
-                    bands.add(amp)
+                    bands[b] = amp
                 }
 
                 _waveform.value = bands
                 _bassMagnitude.value = smoothedBass
                 _energy.value = smoothedEnergy
 
-                delay(33) // ~30 fps update
+                delay(50) // Bounded 20 fps visual updates.
             }
         }
     }
@@ -190,7 +190,7 @@ class VisualizerHelper {
             _isRunning.value = false
             _bassMagnitude.value = 0f
             _energy.value = 0f
-            _waveform.value = emptyList()
+            _waveform.value = FloatArray(0)
             smoothedBass = 0f
             smoothedEnergy = 0f
         }

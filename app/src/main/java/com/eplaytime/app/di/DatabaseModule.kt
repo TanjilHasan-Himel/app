@@ -32,7 +32,12 @@ object DatabaseModule {
             PlayTimeDatabase::class.java,
             "playtime_database"
         )
-            .fallbackToDestructiveMigration()
+            .addMigrations(
+                PlayTimeDatabase.MIGRATION_6_8,
+                PlayTimeDatabase.MIGRATION_7_8,
+                PlayTimeDatabase.MIGRATION_8_9,
+                PlayTimeDatabase.MIGRATION_9_10
+            )
             .build()
     }
 

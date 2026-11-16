@@ -17,8 +17,11 @@ import com.eplaytime.app.data.database.FavoriteSong
 import com.eplaytime.app.data.database.PlayTimeDatabase
 import com.eplaytime.app.data.model.ParsedLyrics
 import com.eplaytime.app.data.model.Song
+import com.eplaytime.app.data.model.RadioStation
 import com.eplaytime.app.data.model.SongWikiData
 import com.eplaytime.app.data.network.LrcLibClient
+import com.eplaytime.app.data.network.LyricsCandidate
+import com.eplaytime.app.playback.playbackQueue
 import com.eplaytime.app.data.network.SongWikiClient
 import com.eplaytime.app.data.repository.Album
 import com.eplaytime.app.data.repository.Artist
@@ -33,10 +36,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -56,6 +61,16 @@ class MusicViewModel @Inject constructor(
     private val dataStore: PlayTimeDataStore
 ) : ViewModel() {
 
+    private var cachedMediaSource: List<Song>? = null
+    private var cachedMediaItems: List<MediaItem> = emptyList()
+
+    private fun mediaItemsFor(songs: List<Song>): List<MediaItem> {
+        if (cachedMediaSource === songs) return cachedMediaItems
+        cachedMediaSource = songs
+        cachedMediaItems = songs.map { it.toMediaItem() }
+        return cachedMediaItems
+    }
+
     companion object {
         private const val PREFS_NAME = "playtime_prefs"
         private const val PREFS_FAVORITES = "favorite_song_ids"
@@ -68,6 +83,7 @@ class MusicViewModel @Inject constructor(
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var isControllerReady = false
     private var pendingPlayUri: String? = null
+    private var pendingPlayQueue: List<Song>? = null
     private var playlistPrepared = false
     private var isRestoring = true // Lock: Prevent overwrite during restore
     private var sleepTimerJob: Job? = null
@@ -79,6 +95,11 @@ class MusicViewModel @Inject constructor(
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
 
+    private val _currentRadioStation = MutableStateFlow<RadioStation?>(null)
+    val currentRadioStation: StateFlow<RadioStation?> = _currentRadioStation.asStateFlow()
+    private val _radioNowPlaying = MutableStateFlow<String?>(null)
+    val radioNowPlaying: StateFlow<String?> = _radioNowPlaying.asStateFlow()
+
     // Lyrics Engine
     private val lyricsDao = PlayTimeDatabase.getDatabase(context).lyricsDao()
     private val lrcLibClient = LrcLibClient(context, lyricsDao)
@@ -88,6 +109,11 @@ class MusicViewModel @Inject constructor(
 
     private val _isLyricsLoading = MutableStateFlow(false)
     val isLyricsLoading: StateFlow<Boolean> = _isLyricsLoading.asStateFlow()
+
+    private val _lyricsCandidates = MutableStateFlow<List<LyricsCandidate>>(emptyList())
+    val lyricsCandidates: StateFlow<List<LyricsCandidate>> = _lyricsCandidates.asStateFlow()
+    private var lyricsLoadJob: Job? = null
+    private var lyricsLoadingUri: String? = null
 
     // Song Wiki Engine
     private val songWikiDao = PlayTimeDatabase.getDatabase(context).songWikiDao()
@@ -116,6 +142,22 @@ class MusicViewModel @Inject constructor(
 
     private val _songList = MutableStateFlow<List<Song>>(emptyList())
     val songList: StateFlow<List<Song>> = _songList.asStateFlow()
+
+    private val _playbackQueue = MutableStateFlow<List<Song>>(emptyList())
+    val playbackQueue: StateFlow<List<Song>> = _playbackQueue.asStateFlow()
+
+    val upcomingQueue: StateFlow<List<Song>> = combine(_currentSong, _playbackQueue, _songList) { current, queue, allSongs ->
+        if (current == null) return@combine emptyList<Song>()
+        val sourceList = if (queue.isNotEmpty()) queue else allSongs
+        val currentIndex = sourceList.indexOfFirst { it.uri == current.uri }
+        if (currentIndex != -1 && currentIndex + 1 < sourceList.size) {
+            sourceList.subList(currentIndex + 1, (currentIndex + 7).coerceAtMost(sourceList.size))
+        } else if (sourceList.size > 1) {
+            sourceList.filter { it.uri != current.uri }.take(6)
+        } else {
+            emptyList()
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _albums = MutableStateFlow<List<Album>>(emptyList())
     val albums: StateFlow<List<Album>> = _albums.asStateFlow()
@@ -157,11 +199,13 @@ class MusicViewModel @Inject constructor(
 
     private val _loopEnabled = MutableStateFlow(false)
     val loopEnabled: StateFlow<Boolean> = _loopEnabled.asStateFlow()
+    private var pendingLoopPreset: Pair<String, LoopPreset>? = null
 
     // Audio Session ID for Visualizer & Real-time FFT Frequency Analysis
     private val _audioSessionId = MutableStateFlow(0)
     val audioSessionId: StateFlow<Int> = _audioSessionId.asStateFlow()
     val visualizerHelper = com.eplaytime.app.util.VisualizerHelper()
+    private var isVisualizerUiVisible = false
 
     // Global in-app HUD notification message
     private val _inAppNotification = MutableStateFlow<String?>(null)
@@ -187,11 +231,17 @@ class MusicViewModel @Inject constructor(
     fun updateVisualizerState() {
         val sessionId = _audioSessionId.value
         val playing = _isPlaying.value
-        if (playing && sessionId > 0) {
+        if (playing && sessionId > 0 && isVisualizerUiVisible) {
             visualizerHelper.start(context, sessionId)
         } else {
             visualizerHelper.stop()
         }
+    }
+
+    fun setVisualizerUiVisible(visible: Boolean) {
+        if (isVisualizerUiVisible == visible) return
+        isVisualizerUiVisible = visible
+        updateVisualizerState()
     }
 
     private val _playbackSpeed = MutableStateFlow(1.0f)
@@ -233,39 +283,47 @@ class MusicViewModel @Inject constructor(
 
     fun setMinSongDurationSec(sec: Int) {
         viewModelScope.launch {
-            dataStore.setMinSongDurationSec(sec)
-            _isShortAudioHidden.value = (sec > 0)
-            applyScanFiltersInMemory()
+            val safeSeconds = sec.coerceAtLeast(0)
+            dataStore.setMinSongDurationSec(safeSeconds)
+            dataStore.setFilterShortAudio(safeSeconds > 0)
+            _isShortAudioHidden.value = safeSeconds > 0
+            applyScanFiltersInMemory(minDurationOverride = safeSeconds)
         }
     }
 
     fun setFolderFilterMode(mode: String) {
         viewModelScope.launch {
-            dataStore.setFolderFilterMode(mode)
-            applyScanFiltersInMemory()
+            val safeMode = if (mode.equals("INCLUDE", true)) "INCLUDE" else "EXCLUDE"
+            dataStore.setFolderFilterMode(safeMode)
+            applyScanFiltersInMemory(folderModeOverride = safeMode)
         }
     }
 
     fun addFilteredFolder(path: String) {
         viewModelScope.launch {
             dataStore.addFilteredFolder(path)
-            applyScanFiltersInMemory()
+            applyScanFiltersInMemory(foldersOverride = filteredFolders.value + path)
         }
     }
 
     fun removeFilteredFolder(path: String) {
         viewModelScope.launch {
             dataStore.removeFilteredFolder(path)
-            applyScanFiltersInMemory()
+            applyScanFiltersInMemory(foldersOverride = filteredFolders.value - path)
         }
     }
 
-    private fun applyScanFiltersInMemory() {
+    private fun applyScanFiltersInMemory(
+        minDurationOverride: Int? = null,
+        callFilterOverride: Boolean? = null,
+        folderModeOverride: String? = null,
+        foldersOverride: Set<String>? = null
+    ) {
         viewModelScope.launch {
-            val minSec = minSongDurationSec.value
-            val callFilter = _isCallRecordingHidden.value
-            val mode = folderFilterMode.value
-            val folders = filteredFolders.value
+            val minSec = minDurationOverride ?: minSongDurationSec.value
+            val callFilter = callFilterOverride ?: _isCallRecordingHidden.value
+            val mode = folderModeOverride ?: folderFilterMode.value
+            val folders = foldersOverride ?: filteredFolders.value
 
             val songs = withContext(Dispatchers.IO) {
                 musicRepository.getAllSongs(
@@ -618,10 +676,11 @@ class MusicViewModel @Inject constructor(
                     android.util.Log.d("MusicViewModel", "Retrieved Audio Session ID from sessionExtras on connect: $extrasSessionId")
                 }
                 setupPlayerListener()
+                refreshQueueFromController()
                 preparePlaylistIfReady()
                 requestAudioSessionId()
                 pendingPlayUri?.let { uri ->
-                    playSongInternal(uri)
+                    playSongInternal(uri, pendingPlayQueue ?: _songList.value)
                 }
             },
             MoreExecutors.directExecutor()
@@ -650,6 +709,7 @@ class MusicViewModel @Inject constructor(
                 // Reset progress immediately on song change
                 _progress.value = 0L
                 _duration.value = mediaController?.duration?.takeIf { it > 0 } ?: 0L
+                clearLoop()
                 if (_audioSessionId.value <= 0) {
                     requestAudioSessionId()
                 }
@@ -659,14 +719,17 @@ class MusicViewModel @Inject constructor(
                     ?: mediaItem?.requestMetadata?.mediaUri?.toString()
                 val targetId = mediaItem?.mediaId
 
-                val song = _songList.value.find { 
+                val isRadio = targetId?.startsWith("radio:") == true
+                val song = _songList.value.find {
                     (targetUri != null && it.uri == targetUri) || 
                     (targetId != null && (it.id.toString() == targetId || it.uri == targetId))
-                } ?: mediaController?.currentMediaItemIndex?.let { idx ->
+                } ?: mediaController?.currentMediaItemIndex?.takeUnless { isRadio }?.let { idx ->
                     _songList.value.getOrNull(idx)
                 }
 
                 if (song != null) {
+                    _currentRadioStation.value = null
+                    _radioNowPlaying.value = null
                     _currentSong.value = song
                     loadLyricsForSong(song)
                     if (_duration.value == 0L && song.duration > 0) {
@@ -677,7 +740,25 @@ class MusicViewModel @Inject constructor(
                     }
                     markSongPlayed(song.uri)
                     refreshCurrentSongLoopPresets()
+                    pendingLoopPreset?.takeIf { it.first == song.uri }?.let { (_, preset) ->
+                        _loopStart.value = preset.startMs
+                        _loopEnd.value = preset.endMs
+                        _loopEnabled.value = true
+                        seekTo(preset.startMs)
+                        pendingLoopPreset = null
+                    }
                     android.util.Log.d("MusicViewModel", "Track transitioned to: ${song.title} (${song.artist}) via reason=$reason")
+                } else if (isRadio) {
+                    _currentSong.value = null
+                    _currentLyrics.value = null
+                    _lyricsCandidates.value = emptyList()
+                }
+            }
+
+            override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
+                if (_currentRadioStation.value != null) {
+                    _radioNowPlaying.value = mediaMetadata.title?.toString()
+                        ?.takeUnless { it == _currentRadioStation.value?.name }
                 }
             }
 
@@ -876,8 +957,9 @@ class MusicViewModel @Inject constructor(
                         mediaController?.let { controller ->
                             val index = _songList.value.indexOfFirst { it.uri == state.lastSongUri }
                             if (index >= 0) {
-                                val mediaItems = _songList.value.map { it.toMediaItem() }
+                                val mediaItems = mediaItemsFor(_songList.value)
                                 controller.setMediaItems(mediaItems, index, state.lastPosition)
+                                _playbackQueue.value = _songList.value
 
 
 
@@ -927,7 +1009,7 @@ class MusicViewModel @Inject constructor(
         // If we are restored, we might have set items already. Check if we need to force update.
         if (playlistPrepared && !force) return
 
-        val mediaItems = songs.map { it.toMediaItem() }
+        val mediaItems = mediaItemsFor(songs)
 
 
 
@@ -947,6 +1029,7 @@ class MusicViewModel @Inject constructor(
             } else {
                  controller.setMediaItems(mediaItems)
             }
+            _playbackQueue.value = songs
         }
         
         controller.prepare()
@@ -957,25 +1040,71 @@ class MusicViewModel @Inject constructor(
      * Play a specific song by URI
      */
     fun playSong(uri: String) {
-        if (!isControllerReady || _songList.value.isEmpty()) {
-            pendingPlayUri = uri
-            return
-        }
-        playSongInternal(uri)
+        playSongInQueue(_songList.value, uri)
     }
 
-    private fun playSongInternal(uri: String) {
+    fun playSongInQueue(songs: List<Song>, uri: String) {
+        val queue = playbackQueue(songs)
+        if (queue.none { it.uri == uri }) return
+        if (!isControllerReady || _songList.value.isEmpty()) {
+            pendingPlayUri = uri
+            pendingPlayQueue = queue
+            return
+        }
+        playSongInternal(uri, queue)
+    }
+
+    fun playRadioStation(station: RadioStation) {
+        val controller = mediaController
+        if (controller == null || !isControllerReady) {
+            showInAppNotification("Playback service is still starting. Try again.")
+            return
+        }
+        val extras = android.os.Bundle().apply {
+            putString("radio_uuid", station.uuid)
+            putString("fallback_url", station.fallbackUrl)
+        }
+        val metadata = androidx.media3.common.MediaMetadata.Builder()
+            .setTitle(station.name)
+            .setArtist(listOf(station.country, station.language).filter(String::isNotBlank).joinToString(" • "))
+            .setArtworkUri(station.favicon.takeIf(String::isNotBlank)?.let(android.net.Uri::parse))
+            .setExtras(extras)
+            .build()
+        val item = MediaItem.Builder()
+            .setMediaId("radio:${station.uuid}")
+            .setUri(station.streamUrl)
+            .apply { if (station.isHls) setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8) }
+            .setMediaMetadata(metadata)
+            .build()
+
+        _currentRadioStation.value = station
+        _radioNowPlaying.value = null
+        _currentSong.value = null
+        _currentLyrics.value = null
+        _lyricsCandidates.value = emptyList()
+        _playbackQueue.value = emptyList()
+        clearLoop()
+        controller.shuffleModeEnabled = false
+        controller.repeatMode = Player.REPEAT_MODE_OFF
+        controller.setMediaItem(item)
+        controller.prepare()
+        controller.play()
+        playlistPrepared = false
+    }
+
+    private fun playSongInternal(uri: String, songs: List<Song>) {
         val controller = mediaController ?: return
-        val songIndex = _songList.value.indexOfFirst { it.uri == uri }
+        val songIndex = songs.indexOfFirst { it.uri == uri }
         if (songIndex >= 0) {
             val route = detectAudioRoute()
             viewModelScope.launch {
                 val routePosition = dataStore.getRoutePosition(uri, route)
                 val startPosition = routeAdjustedStartPosition(routePosition, route)
 
-                val mediaItems = _songList.value.map { it.toMediaItem() }
+                val mediaItems = mediaItemsFor(songs)
 
                 controller.setMediaItems(mediaItems, songIndex, startPosition)
+                _playbackQueue.value = songs
                 controller.prepare()
                 controller.setPlaybackSpeed(_playbackSpeed.value)
 
@@ -989,8 +1118,9 @@ class MusicViewModel @Inject constructor(
 
                 playlistPrepared = true
                 pendingPlayUri = null
-                _currentSong.value = _songList.value[songIndex]
-                loadLyricsForSong(_songList.value[songIndex])
+                pendingPlayQueue = null
+                _currentSong.value = songs[songIndex]
+                loadLyricsForSong(songs[songIndex])
 
                 // Clear A-B loop when new song starts
                 clearLoop()
@@ -1017,6 +1147,15 @@ class MusicViewModel @Inject constructor(
             val uri = _songList.value[index].uri
             playSong(uri)
         }
+    }
+
+    fun playQueueSong(uri: String) {
+        val controller = mediaController ?: return
+        val index = (0 until controller.mediaItemCount).firstOrNull {
+            controller.getMediaItemAt(it).localConfiguration?.uri.toString() == uri
+        } ?: return
+        controller.seekToDefaultPosition(index)
+        controller.play()
     }
 
     /**
@@ -1078,22 +1217,58 @@ class MusicViewModel @Inject constructor(
     /**
      * Load synchronized lyrics for the specified song from local cache, .lrc file, or LRCLIB
      */
-    fun loadLyricsForSong(song: Song?) {
+    fun loadLyricsForSong(song: Song?, forceRefresh: Boolean = false) {
+        if (!forceRefresh && song != null && lyricsLoadingUri == song.uri && lyricsLoadJob?.isActive == true) return
+        lyricsLoadJob?.cancel()
         if (song == null) {
             _currentLyrics.value = null
+            _lyricsCandidates.value = emptyList()
+            _isLyricsLoading.value = false
             return
         }
-        viewModelScope.launch {
+        lyricsLoadingUri = song.uri
+        lyricsLoadJob = viewModelScope.launch {
             _isLyricsLoading.value = true
             try {
-                val lyrics = lrcLibClient.getLyricsForSong(song)
-                _currentLyrics.value = lyrics
+                if (forceRefresh) lrcLibClient.clearCachedLyrics(song)
+                val lookup = lrcLibClient.getLyricsForSong(song, ignoreCache = forceRefresh)
+                if (_currentSong.value?.uri == song.uri) {
+                    _currentLyrics.value = lookup.lyrics
+                    _lyricsCandidates.value = lookup.candidates
+                    lookup.retryAfterSeconds?.let {
+                        showInAppNotification("Lyrics provider is busy. Try again in ${it}s")
+                    }
+                }
             } catch (e: Exception) {
-                _currentLyrics.value = null
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (_currentSong.value?.uri == song.uri) {
+                    _currentLyrics.value = null
+                    _lyricsCandidates.value = emptyList()
+                }
+            } finally {
+                if (_currentSong.value?.uri == song.uri) _isLyricsLoading.value = false
+                if (lyricsLoadingUri == song.uri) lyricsLoadingUri = null
+            }
+        }
+    }
+
+    fun retryLyricsForSong(song: Song?) = loadLyricsForSong(song, forceRefresh = true)
+
+    fun selectLyricsCandidate(song: Song, candidate: LyricsCandidate) {
+        lyricsLoadJob?.cancel()
+        lyricsLoadJob = viewModelScope.launch {
+            _isLyricsLoading.value = true
+            try {
+                _currentLyrics.value = lrcLibClient.selectCandidate(song, candidate)
+                _lyricsCandidates.value = emptyList()
             } finally {
                 _isLyricsLoading.value = false
             }
         }
+    }
+
+    fun dismissLyricsCandidates() {
+        _lyricsCandidates.value = emptyList()
     }
 
     /**
@@ -1407,7 +1582,9 @@ class MusicViewModel @Inject constructor(
     fun playLoopPreset(songUri: String, preset: LoopPreset) {
         val currentUri = _currentSong.value?.uri
         if (currentUri != songUri) {
+            pendingLoopPreset = songUri to preset
             playSong(songUri)
+            return
         }
         _loopStart.value = preset.startMs
         _loopEnd.value = preset.endMs
@@ -1525,13 +1702,18 @@ class MusicViewModel @Inject constructor(
     private fun startProgressUpdates() {
         progressUpdateJob?.cancel()
         progressUpdateJob = viewModelScope.launch {
-            while (true) {
+            var lastUiUpdateMs = 0L
+            while (isActive) {
                 mediaController?.let {
                     val current = it.currentPosition
                     val total = it.duration
-                    
-                    if (current >= 0) _progress.value = current
-                    if (total > 0) _duration.value = total
+
+                    val now = android.os.SystemClock.uptimeMillis()
+                    if (now - lastUiUpdateMs >= 250L) {
+                        if (current >= 0) _progress.value = current
+                        if (total > 0) _duration.value = total
+                        lastUiUpdateMs = now
+                    }
 
                     // Check A-B loop
                     if (_loopEnabled.value) {
@@ -1542,7 +1724,7 @@ class MusicViewModel @Inject constructor(
                         }
                     }
                 }
-                delay(100L) // Update every 100ms for 30fps smooth UI
+                delay(if (_loopEnabled.value) 20L else 250L)
             }
         }
     }
@@ -1622,7 +1804,7 @@ class MusicViewModel @Inject constructor(
         viewModelScope.launch {
             dataStore.setFilterCallRecordings(enabled)
         }
-        loadLocalSongs(filterCallRecordings = enabled)
+        applyScanFiltersInMemory(callFilterOverride = enabled)
     }
 
     /**
@@ -1633,6 +1815,7 @@ class MusicViewModel @Inject constructor(
      */
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         mediaController?.moveMediaItem(fromIndex, toIndex)
+        refreshQueueFromController()
     }
 
     /**
@@ -1640,6 +1823,7 @@ class MusicViewModel @Inject constructor(
      */
     fun removeFromQueue(index: Int) {
         mediaController?.removeMediaItem(index)
+        refreshQueueFromController()
     }
 
     fun playNextFromQueue(songUri: String) {
@@ -1649,6 +1833,7 @@ class MusicViewModel @Inject constructor(
         } ?: return
         val targetIndex = (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount - 1)
         controller.moveMediaItem(fromIndex, targetIndex)
+        refreshQueueFromController()
     }
 
     fun playLaterFromQueue(songUri: String) {
@@ -1658,6 +1843,15 @@ class MusicViewModel @Inject constructor(
         } ?: return
         val targetIndex = (controller.mediaItemCount - 1).coerceAtLeast(0)
         controller.moveMediaItem(fromIndex, targetIndex)
+        refreshQueueFromController()
+    }
+
+    private fun refreshQueueFromController() {
+        val controller = mediaController ?: return
+        val songsByUri = _songList.value.associateBy { it.uri }
+        _playbackQueue.value = (0 until controller.mediaItemCount).mapNotNull { index ->
+            controller.getMediaItemAt(index).localConfiguration?.uri?.toString()?.let(songsByUri::get)
+        }
     }
 
     fun removeUpcomingDuplicates() {

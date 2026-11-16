@@ -9,12 +9,14 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.eplaytime.app.data.repository.MusicRepository
 import com.google.common.util.concurrent.Futures
@@ -37,25 +39,47 @@ class MusicService : MediaLibraryService() {
         const val EXTRA_ALARM_ID = "extra_alarm_id"
         const val EXTRA_TARGET_VOLUME = "extra_target_volume"
         const val EXTRA_ALARM_SINGLE_SHOT = "extra_alarm_single_shot"
+        const val EXTRA_ALARM_CONTENT_URIS = "extra_alarm_content_uris"
+        const val EXTRA_ALARM_FADE_SECONDS = "extra_alarm_fade_seconds"
+        const val EXTRA_ALARM_STOP_AFTER_MINUTES = "extra_alarm_stop_after_minutes"
+        const val EXTRA_ALARM_RECOVERY = "extra_alarm_recovery"
+        const val EXTRA_ALARM_ORIGINAL_VOLUME = "extra_alarm_original_volume"
         const val NOTIFICATION_ID_ALARM = 12345
         private const val TAG = "MusicService"
     }
 
     @Inject
     lateinit var musicRepository: MusicRepository
+    @Inject
+    lateinit var scheduledTaskDao: com.eplaytime.app.data.dao.ScheduledTaskDao
 
     private var player: ExoPlayer? = null
     private var mediaSession: MediaLibrarySession? = null
     private var isAlarmSingleShotMode = false
     private var fadeCoroutine: kotlinx.coroutines.Job? = null
+    private var scheduledStopJob: kotlinx.coroutines.Job? = null
+    private var activeScheduledTaskId = -1L
+    private var previousSystemVolume: Int? = null
+    private val serviceScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate
+    )
+    private var radioRetryCount = 0
+    private var radioFallbackTried = false
+    private val retryHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent == null) {
+            recoverInterruptedScheduledSession()
+            return START_STICKY
+        }
         if (intent?.action == ACTION_STOP_ALARM) {
             Log.d(TAG, "Stop alarm action received, terminating scheduled playback")
             isAlarmSingleShotMode = false
             fadeCoroutine?.cancel()
+            scheduledStopJob?.cancel()
             player?.stop()
             player?.clearMediaItems()
+            finishScheduledSession("STOPPED")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
@@ -64,12 +88,23 @@ class MusicService : MediaLibraryService() {
             val uriString = intent.getStringExtra(EXTRA_SONG_URI)
             val volume = intent.getFloatExtra(EXTRA_TARGET_VOLUME, 1.0f)
             val singleShot = intent.getBooleanExtra(EXTRA_ALARM_SINGLE_SHOT, true)
+            val isRecovery = intent.getBooleanExtra(EXTRA_ALARM_RECOVERY, false)
+            activeScheduledTaskId = intent.getLongExtra(EXTRA_ALARM_ID, -1L)
             
             if (uriString != null) {
                 // 1. Override the system media volume to perfectly match exactly what the user scheduled
                 try {
                     val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
                     val maxSystemVolume = audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                    previousSystemVolume = intent.getIntExtra(EXTRA_ALARM_ORIGINAL_VOLUME, -1)
+                        .takeIf { it >= 0 }
+                        ?: audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                    if (!isRecovery && activeScheduledTaskId >= 0) serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        scheduledTaskDao.updateOriginalSystemVolume(
+                            activeScheduledTaskId,
+                            previousSystemVolume ?: -1
+                        )
+                    }
                     
                     val devices = audioManager.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
                     val hasHeadphones = devices.any {
@@ -126,17 +161,24 @@ class MusicService : MediaLibraryService() {
                     .setArtist("Audia Player Scheduler")
                     .build()
 
-                val item = MediaItem.Builder()
-                    .setUri(uriString)
-                    .setMediaMetadata(metadata)
-                    .build()
+                val contentUris = intent.getStringArrayListExtra(EXTRA_ALARM_CONTENT_URIS)
+                    ?.filter(String::isNotBlank)
+                    .orEmpty()
+                    .ifEmpty { listOf(uriString) }
+                val items = contentUris.mapIndexed { index, uri ->
+                    MediaItem.Builder()
+                        .setMediaId("schedule:$activeScheduledTaskId:$index")
+                        .setUri(uri)
+                        .setMediaMetadata(metadata)
+                        .build()
+                }
                 player?.let { exo ->
                     isAlarmSingleShotMode = singleShot
                     exo.stop()
                     exo.clearMediaItems()
                     exo.repeatMode = Player.REPEAT_MODE_OFF
                     exo.shuffleModeEnabled = false
-                    exo.setMediaItem(item)
+                    exo.setMediaItems(items)
                     
                     // 2. Start internally at completely silent (0f) for the fade-in effect
                     exo.volume = 0f
@@ -146,9 +188,10 @@ class MusicService : MediaLibraryService() {
                     // 3. Launch a smooth fade-in coroutine gracefully turning it up over 10 seconds
                     fadeCoroutine?.cancel()
                     fadeCoroutine = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                        val fadeDuration = 10_000L // 10 seconds
+                        val fadeDuration = intent.getIntExtra(EXTRA_ALARM_FADE_SECONDS, 10)
+                            .coerceIn(0, 120) * 1_000L
                         val fadeInterval = 100L    // update every 100ms
-                        val steps = (fadeDuration / fadeInterval).toInt()
+                        val steps = (fadeDuration / fadeInterval).toInt().coerceAtLeast(1)
                         
                         // We fade internal volume from 0 to 1.0 (since the system-level volume is now perfect)
                         val targetInternalVolume = 1.0f
@@ -164,11 +207,36 @@ class MusicService : MediaLibraryService() {
                         Log.d(TAG, "Fade-in playback complete and reached max level")
                     }
 
+                    scheduledStopJob?.cancel()
+                    val stopAfterMinutes = intent.getIntExtra(EXTRA_ALARM_STOP_AFTER_MINUTES, 0)
+                    if (stopAfterMinutes > 0) {
+                        scheduledStopJob = serviceScope.launch {
+                            delay(stopAfterMinutes.coerceAtMost(24 * 60) * 60_000L)
+                            exo.stop()
+                            exo.clearMediaItems()
+                            finishScheduledSession("COMPLETED")
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf()
+                        }
+                    }
+
+                    serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        if (activeScheduledTaskId >= 0) {
+                            scheduledTaskDao.getTaskById(activeScheduledTaskId)?.let { task ->
+                                scheduledTaskDao.updateRunState(
+                                    task.id, System.currentTimeMillis(), "PLAYING",
+                                    task.activeCycleId, 0, task.recoveryAttempts
+                                )
+                            }
+                        }
+                    }
+
                     Log.d(TAG, "Playback scheduler started. singleShot=$singleShot uri=$uriString")
                 }
             }
         }
-        return super.onStartCommand(intent, flags, startId)
+        return if (intent?.action == ACTION_PLAY_ALARM) START_STICKY
+        else super.onStartCommand(intent, flags, startId)
     }
 
     // Callback for MediaSession events
@@ -240,11 +308,11 @@ class MusicService : MediaLibraryService() {
                     Log.d(TAG, "Responding to ACTION_GET_AUDIO_SESSION_ID with session: $sessionId")
                     Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, extras))
                 } else {
-                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
+                    Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error handling custom command", e)
-                Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_UNKNOWN))
+                Futures.immediateFuture(SessionResult(SessionError.ERROR_UNKNOWN))
             }
         }
     }
@@ -253,19 +321,173 @@ class MusicService : MediaLibraryService() {
         super.onCreate()
         initializePlayer()
         player?.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                radioRetryCount = 0
+                radioFallbackTried = false
+                val taskId = activeScheduledTaskId
+                // Read player on Main thread to avoid IllegalStateException: Player is accessed on the wrong thread
+                val currentTrackIndex = player?.currentMediaItemIndex?.coerceAtLeast(0) ?: 0
+                if (taskId >= 0) serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    scheduledTaskDao.getTaskById(taskId)?.let { task ->
+                        scheduledTaskDao.updateRunState(
+                            task.id,
+                            task.lastRunAt,
+                            "PLAYING",
+                            task.activeCycleId,
+                            currentTrackIndex,
+                            task.recoveryAttempts
+                        )
+                    }
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                com.eplaytime.app.util.FirebaseDiagnostics.recordPlaybackState(if (isPlaying) "PLAYING" else "PAUSED")
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (isAlarmSingleShotMode && playbackState == Player.STATE_ENDED) {
                     player?.pause()
                     player?.seekTo(0L)
                     isAlarmSingleShotMode = false
+                    finishScheduledSession("COMPLETED")
                     Log.d(TAG, "Alarm single-shot completed, stopping service")
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 }
             }
+
+            override fun onPlayerError(error: PlaybackException) {
+                if (isAlarmSingleShotMode) {
+                    isAlarmSingleShotMode = false
+                    finishScheduledSession("FAILED")
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return
+                }
+                val exo = player ?: return
+                val item = exo.currentMediaItem ?: return
+                if (!item.mediaId.startsWith("radio:")) return
+
+                val fallback = item.mediaMetadata.extras?.getString("fallback_url").orEmpty()
+                if (!radioFallbackTried && fallback.isNotBlank() &&
+                    item.localConfiguration?.uri?.toString() != fallback
+                ) {
+                    radioFallbackTried = true
+                    exo.setMediaItem(item.buildUpon().setUri(fallback).build())
+                    exo.prepare()
+                    exo.play()
+                    return
+                }
+
+                if (radioRetryCount < 3) {
+                    val delayMs = 1_000L shl radioRetryCount
+                    radioRetryCount++
+                    retryHandler.postDelayed({
+                        player?.takeIf { it.currentMediaItem?.mediaId == item.mediaId }?.let {
+                            it.prepare()
+                            it.play()
+                        }
+                    }, delayMs)
+                }
+            }
         })
     }
 
+    private fun finishScheduledSession(result: String) {
+        fadeCoroutine?.cancel()
+        scheduledStopJob?.cancel()
+        previousSystemVolume?.let { original ->
+            runCatching {
+                val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+                audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, original, 0)
+            }.onFailure { Log.e(TAG, "Unable to restore media volume", it) }
+        }
+        previousSystemVolume = null
+        val taskId = activeScheduledTaskId
+        activeScheduledTaskId = -1L
+        if (taskId >= 0) serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            scheduledTaskDao.getTaskById(taskId)?.let { task ->
+                scheduledTaskDao.updateRunState(
+                    task.id, task.lastRunAt, result, "", 0, 0
+                )
+                scheduledTaskDao.updateOriginalSystemVolume(task.id, -1)
+            }
+        }
+    }
+
+    private fun recoverInterruptedScheduledSession() {
+        serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val task = scheduledTaskDao.getRecoverableTask() ?: return@launch
+            if (task.recoveryAttempts >= 2) {
+                restorePersistedVolume(task.originalSystemVolume)
+                scheduledTaskDao.updateRunState(task.id, task.lastRunAt, "FAILED", "", 0, 0)
+                scheduledTaskDao.updateOriginalSystemVolume(task.id, -1)
+                return@launch
+            }
+            scheduledTaskDao.updateRunState(
+                task.id,
+                task.lastRunAt,
+                "STARTING",
+                task.activeCycleId,
+                task.activeTrackIndex,
+                task.recoveryAttempts + 1
+            )
+            val recoveryIntent = Intent(this@MusicService, MusicService::class.java).apply {
+                action = ACTION_PLAY_ALARM
+                putExtra(EXTRA_SONG_URI, task.songUri)
+                putExtra(EXTRA_ALARM_ID, task.id)
+                putExtra(EXTRA_TARGET_VOLUME, task.targetVolume)
+                putExtra("extra_song_title", task.songTitle)
+                putExtra(EXTRA_ALARM_SINGLE_SHOT, true)
+                putExtra(EXTRA_ALARM_FADE_SECONDS, task.fadeInSeconds)
+                putExtra(EXTRA_ALARM_STOP_AFTER_MINUTES, task.stopAfterMinutes)
+                putExtra(EXTRA_ALARM_RECOVERY, true)
+                putExtra(EXTRA_ALARM_ORIGINAL_VOLUME, task.originalSystemVolume)
+                putStringArrayListExtra(
+                    EXTRA_ALARM_CONTENT_URIS,
+                    ArrayList(
+                        task.contentUris.lineSequence().filter(String::isNotBlank).toList()
+                            .ifEmpty { listOf(task.songUri) }
+                    )
+                )
+            }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                onStartCommand(recoveryIntent, 0, 0)
+                player?.seekToDefaultPosition(task.activeTrackIndex.coerceAtLeast(0))
+            }
+        }
+    }
+
+    private fun restorePersistedVolume(volume: Int) {
+        if (volume < 0) return
+        runCatching {
+            val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+            audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, volume, 0)
+        }.onFailure { Log.e(TAG, "Unable to restore persisted media volume", it) }
+    }
+
+    private fun markScheduledInterrupted() {
+        val taskId = activeScheduledTaskId
+        // Read player on Main thread to avoid IllegalStateException: Player is accessed on the wrong thread
+        val currentTrackIndex = player?.currentMediaItemIndex?.coerceAtLeast(0)
+        restorePersistedVolume(previousSystemVolume ?: -1)
+        previousSystemVolume = null
+        if (taskId >= 0) serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            scheduledTaskDao.getTaskById(taskId)?.let { task ->
+                scheduledTaskDao.updateRunState(
+                    task.id,
+                    task.lastRunAt,
+                    "INTERRUPTED",
+                    task.activeCycleId,
+                    currentTrackIndex ?: task.activeTrackIndex,
+                    task.recoveryAttempts
+                )
+            }
+        }
+    }
+
+    @OptIn(UnstableApi::class)
     private fun initializePlayer() {
         val audioAttributes = AudioAttributes.Builder()
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -360,6 +582,8 @@ class MusicService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        retryHandler.removeCallbacksAndMessages(null)
+        if (activeScheduledTaskId >= 0) markScheduledInterrupted()
         AudioEffectManager.release()
         mediaSession?.run {
             player.release()

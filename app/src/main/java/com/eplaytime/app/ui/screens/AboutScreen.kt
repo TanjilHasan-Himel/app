@@ -30,6 +30,7 @@ import coil.compose.AsyncImage
 import com.eplaytime.app.BuildConfig
 import com.eplaytime.app.R
 import com.eplaytime.app.ui.theme.*
+import com.eplaytime.app.util.FirebaseDiagnostics
 import com.eplaytime.app.util.Legals
 import java.util.Calendar
 
@@ -43,6 +44,9 @@ fun AboutScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        FirebaseDiagnostics.recordScreen(context, "AboutScreen")
+    }
     val currentYear = Calendar.getInstance().get(Calendar.YEAR)
     val versionName = BuildConfig.VERSION_NAME ?: "1.0.0"
     val releaseDate = "November 8, 2026"

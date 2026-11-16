@@ -1,6 +1,7 @@
 package com.eplaytime.app
 
 import com.eplaytime.app.data.model.Song
+import com.eplaytime.app.data.repository.MusicScanFilter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -78,29 +79,9 @@ class MusicFilterUnitTest {
         filterShortAudio: Boolean,
         filterCallRecordings: Boolean
     ): List<Song> {
-        val minDurationMs = 30000L
-        return songs.filter { song ->
-            var include = true
-            if (filterShortAudio && (song.duration < minDurationMs || song.duration <= 0L)) {
-                include = false
-            }
-            if (include && filterCallRecordings) {
-                val path = song.folderPath.lowercase()
-                val bucket = song.bucketDisplayName.lowercase()
-                val title = song.title.lowercase()
-                val isCallOrVoice = path.contains("/call") || path.contains("call_") ||
-                    path.contains("/record") || path.contains("voice") ||
-                    path.contains("whatsapp") || path.contains("audio record") ||
-                    bucket.contains("call") || bucket.contains("record") ||
-                    bucket.contains("voice") || bucket.contains("whatsapp") ||
-                    title.startsWith("call_") || title.startsWith("recording_") || title.startsWith("voice ") ||
-                    title.startsWith("rec_") || title.startsWith("aud-")
-                if (isCallOrVoice) {
-                    include = false
-                }
-            }
-            include
-        }
+        return MusicScanFilter.apply(
+            songs, if (filterShortAudio) 30 else 0, filterCallRecordings, "EXCLUDE", emptySet()
+        )
     }
 
     @Test
@@ -159,42 +140,27 @@ class MusicFilterUnitTest {
         folderFilterMode: String,
         filteredFolders: Set<String>
     ): List<Song> {
-        val minDurationMs = minDurationSec * 1000L
-        return songs.filter { song ->
-            var include = true
-            if (minDurationMs > 0 && (song.duration < minDurationMs || song.duration <= 0L)) {
-                include = false
-            }
-            if (include && filterCallRecordings) {
-                val path = song.folderPath.lowercase()
-                val bucket = song.bucketDisplayName.lowercase()
-                val title = song.title.lowercase()
-                val isCallOrVoice = path.contains("/call") || path.contains("call_") ||
-                    path.contains("/record") || path.contains("voice") ||
-                    path.contains("whatsapp") || path.contains("audio record") ||
-                    bucket.contains("call") || bucket.contains("record") ||
-                    bucket.contains("voice") || bucket.contains("whatsapp") ||
-                    title.startsWith("call_") || title.startsWith("recording_") || title.startsWith("voice ") ||
-                    title.startsWith("rec_") || title.startsWith("aud-")
-                if (isCallOrVoice) {
-                    include = false
-                }
-            }
-            if (include && filteredFolders.isNotEmpty()) {
-                val songPath = song.folderPath.replace('\\', '/')
-                val isPathMatched = filteredFolders.any { filterFolder ->
-                    val cleanFolder = filterFolder.replace('\\', '/').trimEnd('/')
-                    songPath.startsWith("$cleanFolder/", ignoreCase = true) ||
-                        songPath.equals(cleanFolder, ignoreCase = true)
-                }
-                if (folderFilterMode == "include") {
-                    if (!isPathMatched) include = false
-                } else {
-                    if (isPathMatched) include = false
-                }
-            }
-            include
-        }
+        return MusicScanFilter.apply(songs, minDurationSec, filterCallRecordings, folderFilterMode, filteredFolders)
+    }
+
+    @Test
+    fun testWhatsAppVoiceNotesAreHiddenButWhatsAppSongsRemain() {
+        val voiceNote = sampleSongs.first().copy(
+            id = 20,
+            title = "PTT-20261112-WA0001",
+            folderPath = "/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Voice Notes/voice.opus",
+            bucketDisplayName = "WhatsApp Voice Notes"
+        )
+        val sharedSong = sampleSongs.first().copy(
+            id = 21,
+            title = "Shared Song",
+            folderPath = "/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Audio/song.mp3",
+            bucketDisplayName = "WhatsApp Audio"
+        )
+
+        val result = MusicScanFilter.apply(listOf(voiceNote, sharedSong), 0, true, "EXCLUDE", emptySet())
+
+        assertEquals(listOf(sharedSong), result)
     }
 
     @Test

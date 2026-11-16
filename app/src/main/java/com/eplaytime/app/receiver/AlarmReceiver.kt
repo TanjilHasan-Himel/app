@@ -74,6 +74,41 @@ class AlarmReceiver : BroadcastReceiver() {
                         return@launch
                     }
 
+                    // Persist the next occurrence before starting playback, so a service crash
+                    // cannot erase a recurring schedule's next cycle.
+                    if (task.repeatDays.isNotEmpty()) {
+                        val nextRunAt = com.eplaytime.app.util.AlarmScheduler(context).scheduleAlarm(task)
+                        if (nextRunAt != null) {
+                            db.scheduledTaskDao().updateSchedulingState(task.id, nextRunAt, task.lastResult)
+                        }
+                    }
+
+                    val scheduledUris = task.contentUris.lineSequence()
+                        .filter(String::isNotBlank)
+                        .toList()
+                        .ifEmpty { listOf(task.songUri) }
+                    val availableUris = scheduledUris.filter { uri ->
+                        runCatching {
+                            context.contentResolver.openAssetFileDescriptor(
+                                android.net.Uri.parse(uri),
+                                "r"
+                            )?.use { true } ?: false
+                        }.getOrDefault(false)
+                    }
+                    if (availableUris.isEmpty()) {
+                        db.scheduledTaskDao().updateRunState(
+                            task.id,
+                            System.currentTimeMillis(),
+                            "MISSING_CONTENT",
+                            "",
+                            0,
+                            0
+                        )
+                        if (task.repeatDays.isEmpty()) db.scheduledTaskDao().toggleTask(task.id, false)
+                        Log.e(TAG, "Scheduled content is no longer readable for task ${task.id}")
+                        return@launch
+                    }
+
                     // 2. Validate Day (CRITICAL LOGIC - Must check selected days)
                     Log.d(TAG, "Validating day... Repeat days: ${task.repeatDays}")
                     val shouldPlay = if (task.repeatDays.isEmpty()) {
@@ -110,9 +145,24 @@ class AlarmReceiver : BroadcastReceiver() {
                             putExtra(EXTRA_ALARM_ID, alarmId)
                             putExtra(EXTRA_TARGET_VOLUME, task.targetVolume)
                             putExtra("extra_song_title", task.songTitle)
-                            // Core USP behavior: scheduled alarm plays exactly one selected track.
+                            putStringArrayListExtra(
+                                MusicService.EXTRA_ALARM_CONTENT_URIS,
+                                ArrayList(
+                                    availableUris
+                                )
+                            )
+                            putExtra(MusicService.EXTRA_ALARM_FADE_SECONDS, task.fadeInSeconds)
+                            putExtra(MusicService.EXTRA_ALARM_STOP_AFTER_MINUTES, task.stopAfterMinutes)
                             putExtra(MusicService.EXTRA_ALARM_SINGLE_SHOT, true)
                         }
+                        db.scheduledTaskDao().updateRunState(
+                            taskId = task.id,
+                            runAt = System.currentTimeMillis(),
+                            result = "STARTING",
+                            cycleId = "${task.id}:${System.currentTimeMillis()}",
+                            trackIndex = 0,
+                            recoveryAttempts = 0
+                        )
                         ContextCompat.startForegroundService(context, serviceIntent)
                         Log.d(TAG, "✓ MusicService started as foreground service")
                     } else {
@@ -120,10 +170,7 @@ class AlarmReceiver : BroadcastReceiver() {
                     }
 
                     // 3. Reschedule repeating alarms or disable one-time alarms
-                    if (task.repeatDays.isNotEmpty()) {
-                        Log.d(TAG, "This is a repeating alarm. Rescheduling...")
-                        com.eplaytime.app.util.AlarmScheduler(context).scheduleAlarm(task)
-                    } else {
+                    if (task.repeatDays.isEmpty()) {
                         if (shouldPlay) {
                             Log.d(TAG, "One-time alarm played. Disabling...")
                             db.scheduledTaskDao().toggleTask(task.id, false)

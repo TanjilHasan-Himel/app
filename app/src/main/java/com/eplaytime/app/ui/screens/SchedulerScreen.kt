@@ -27,6 +27,10 @@ import androidx.core.app.NotificationManagerCompat
 import android.os.Build
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.eplaytime.app.util.PermissionHelper
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,8 +43,10 @@ import androidx.core.app.ActivityCompat
 import com.eplaytime.app.data.model.ScheduledTask
 import com.eplaytime.app.data.model.Song
 import com.eplaytime.app.ui.theme.*
+import com.eplaytime.app.util.FirebaseDiagnostics
 import com.eplaytime.app.ui.viewmodel.MusicViewModel
 import com.eplaytime.app.ui.viewmodel.SchedulerViewModel
+import com.eplaytime.app.util.ScheduledOccurrenceCalculator
 import java.util.*
 
 /**
@@ -64,22 +70,33 @@ fun SchedulerScreen(
     var alarmToEdit by remember { mutableStateOf<ScheduledTask?>(null) }
     
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        FirebaseDiagnostics.recordScreen(context, "SchedulerScreen")
+    }
+    
+    val lifecycleOwner = LocalLifecycleOwner.current
     
     var showBatteryWarning by remember { mutableStateOf(false) }
     var showAlarmWarning by remember { mutableStateOf(false) }
     var showNotificationWarning by remember { mutableStateOf(false) }
     var dismissedBatteryWarningForSession by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            showBatteryWarning = !powerManager.isIgnoringBatteryOptimizations(context.packageName) && !dismissedBatteryWarningForSession
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                showBatteryWarning = !PermissionHelper.isIgnoringBatteryOptimizations(context) && !dismissedBatteryWarningForSession
+                showAlarmWarning = !PermissionHelper.canScheduleExactAlarms(context)
+                showNotificationWarning = !PermissionHelper.hasNotificationPermission(context)
+            }
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val am = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-            showAlarmWarning = !am.canScheduleExactAlarms()
+        lifecycleOwner.lifecycle.addObserver(observer)
+        // Initial check
+        showBatteryWarning = !PermissionHelper.isIgnoringBatteryOptimizations(context) && !dismissedBatteryWarningForSession
+        showAlarmWarning = !PermissionHelper.canScheduleExactAlarms(context)
+        showNotificationWarning = !PermissionHelper.hasNotificationPermission(context)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
-        showNotificationWarning = !NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
     Scaffold(
@@ -87,7 +104,7 @@ fun SchedulerScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Schedule Playback",
+                        text = "Scheduled Playback",
                         fontFamily = OutfitFontFamily,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 22.sp
@@ -117,7 +134,7 @@ fun SchedulerScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = "Create Alarm",
+                    contentDescription = "Create scheduled playback",
                     tint = Color.White
                 )
             }
@@ -145,16 +162,7 @@ fun SchedulerScreen(
                                 Text("Allow battery optimization bypass for more reliable scheduled playback.", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = OutfitFontFamily, lineHeight = 16.sp)
                             }
                             TextButton(onClick = {
-                                val activity = context as? Activity
-                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                    data = Uri.parse("package:${context.packageName}")
-                                }
-                                try {
-                                    context.startActivity(intent)
-                                } catch (_: Exception) {
-                                    val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                                    context.startActivity(fallback)
-                                }
+                                PermissionHelper.openBatteryOptimizationSettings(context)
                                 dismissedBatteryWarningForSession = true
                                 showBatteryWarning = false
                             }) {
@@ -176,14 +184,11 @@ fun SchedulerScreen(
                             Icon(Icons.Default.Warning, contentDescription = "Warning", tint = Color(0xFFFFCDD2))
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Alarms Permission Denied", color = Color(0xFFFFCDD2), fontWeight = FontWeight.Bold, fontFamily = OutfitFontFamily)
-                                Text("Crucial for playing music exactly on time.", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = OutfitFontFamily)
+                                Text("Exact timing needs permission", color = Color(0xFFFFCDD2), fontWeight = FontWeight.Bold, fontFamily = OutfitFontFamily)
+                                Text("Allow Alarms & reminders so Audia can start this session on time.", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = OutfitFontFamily)
                             }
                             TextButton(onClick = {
-                                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                    data = Uri.parse("package:${context.packageName}")
-                                }
-                                context.startActivity(intent)
+                                PermissionHelper.openExactAlarmSettings(context)
                                 showAlarmWarning = false
                             }) {
                                 Text("ALLOW", color = SoftGold, fontFamily = OutfitFontFamily, fontWeight = FontWeight.Bold)
@@ -208,10 +213,7 @@ fun SchedulerScreen(
                                 Text("Needed to keep the system awake during playback.", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = OutfitFontFamily)
                             }
                             TextButton(onClick = {
-                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                }
-                                context.startActivity(intent)
+                                PermissionHelper.openNotificationSettings(context)
                                 showNotificationWarning = false
                             }) {
                                 Text("SETTINGS", color = SoftGold, fontFamily = OutfitFontFamily, fontWeight = FontWeight.Bold)
@@ -230,14 +232,14 @@ fun SchedulerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "No Scheduled Alarms",
+                        text = "No Scheduled Sessions",
                         fontFamily = OswaldFontFamily,
                         fontSize = 24.sp,
                         color = Color.White.copy(alpha = 0.6f)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Tap + to create your first alarm",
+                        text = "Choose music and a time for your first session",
                         fontSize = 14.sp,
                         color = Color.White.copy(alpha = 0.4f)
                     )
@@ -272,27 +274,33 @@ fun SchedulerScreen(
         com.eplaytime.app.ui.components.AlarmDialog(
             songList = songList,
             alarmToEdit = alarmToEdit, // Pass the task to edit
-            onConfirm = { selectedSong, volume, repeatDays, hour, minute ->
+            onConfirm = { content, volume, repeatDays, hour, minute, stopAfterMinutes, fadeInSeconds ->
                 if (alarmToEdit != null) {
                     // Update existing
                     schedulerViewModel.updateTask(
                         task = alarmToEdit!!,
-                        songUri = selectedSong.uri,
-                        songTitle = selectedSong.title,
+                        contentType = content.type,
+                        contentUris = content.songs.map(Song::uri),
+                        contentTitle = content.title,
                         hour = hour,
                         minute = minute,
                         targetVolume = volume,
-                        repeatDays = repeatDays
+                        repeatDays = repeatDays,
+                        stopAfterMinutes = stopAfterMinutes,
+                        fadeInSeconds = fadeInSeconds
                     )
                 } else {
                     // Create new
                     schedulerViewModel.createTask(
-                        songUri = selectedSong.uri,
-                        songTitle = selectedSong.title,
+                        contentType = content.type,
+                        contentUris = content.songs.map(Song::uri),
+                        contentTitle = content.title,
                         hour = hour,
                         minute = minute,
                         targetVolume = volume,
-                        repeatDays = repeatDays
+                        repeatDays = repeatDays,
+                        stopAfterMinutes = stopAfterMinutes,
+                        fadeInSeconds = fadeInSeconds
                     )
                 }
                 showCreateDialog = false
@@ -342,11 +350,39 @@ private fun TaskCard(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "${task.songTitle} • Vol: ${(task.targetVolume * 100).toInt()}%${if (task.repeatDays.isNotEmpty()) " • ${task.repeatDays}" else ""}",
+                    text = "${task.songTitle} • ${task.contentType.lowercase().replaceFirstChar(Char::uppercase)} • Vol ${(task.targetVolume * 100).toInt()}%",
                     fontSize = 14.sp,
                     color = if (task.isEnabled) Color.White.copy(alpha = 0.7f)
                            else Color.White.copy(alpha = 0.3f),
                     maxLines = 1
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                val nextRun = remember(task.hour, task.minute, task.repeatDays, task.nextRunAt) {
+                    java.text.DateFormat.getDateTimeInstance(
+                        java.text.DateFormat.MEDIUM,
+                        java.text.DateFormat.SHORT
+                    ).format(
+                        Date(
+                            task.nextRunAt.takeIf { it > System.currentTimeMillis() }
+                                ?: ScheduledOccurrenceCalculator.nextTriggerMillis(task.hour, task.minute, task.repeatDays)
+                        )
+                    )
+                }
+                Text(
+                    text = when {
+                        !task.isEnabled -> "Disabled"
+                        task.lastResult == "NEEDS_PERMISSION" -> "Needs exact timing permission"
+                        task.lastResult == "PLAYING" || task.lastResult == "STARTING" -> "Playing scheduled session"
+                        task.lastResult == "FAILED" -> "Last session failed • Next $nextRun"
+                        task.lastResult == "MISSING_CONTENT" -> "Selected music is missing or unavailable"
+                        task.lastResult == "MISSED" -> "Previous session was missed • Next $nextRun"
+                        task.lastResult == "INTERRUPTED" -> "Recovering interrupted session"
+                        task.lastResult == "COMPLETED" -> "Completed • Next $nextRun"
+                        else -> "Ready • Next $nextRun${if (task.repeatDays.isNotEmpty()) " • ${task.repeatDays}" else ""}"
+                    },
+                    fontSize = 12.sp,
+                    color = if (task.isEnabled) SoftGold.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.35f),
+                    maxLines = 2
                 )
             }
 

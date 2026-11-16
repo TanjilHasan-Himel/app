@@ -42,7 +42,7 @@ fun SongList(
     currentSongId: Long?,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(bottom = 88.dp),
+    contentPadding: PaddingValues = PaddingValues(bottom = 120.dp),
     state: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState()
 ) {
     Box(modifier = modifier.fillMaxSize()) {

@@ -52,23 +52,37 @@ class SchedulerViewModel @Inject constructor(
     /**
      * Create a new scheduled task
      */
-    fun createTask(songUri: String, songTitle: String, hour: Int, minute: Int, targetVolume: Float, repeatDays: String) {
+    fun createTask(
+        contentType: String,
+        contentUris: List<String>,
+        contentTitle: String,
+        hour: Int,
+        minute: Int,
+        targetVolume: Float,
+        repeatDays: String,
+        stopAfterMinutes: Int,
+        fadeInSeconds: Int
+    ) {
         viewModelScope.launch {
             val task = ScheduledTask(
-                songUri = songUri,
-                songTitle = songTitle,
+                songUri = contentUris.first(),
+                songTitle = contentTitle,
                 hour = hour,
                 minute = minute,
                 isEnabled = true,
                 targetVolume = targetVolume,
-                repeatDays = repeatDays
+                repeatDays = repeatDays,
+                contentType = contentType,
+                contentUris = contentUris.joinToString("\n"),
+                stopAfterMinutes = stopAfterMinutes,
+                fadeInSeconds = fadeInSeconds
             )
 
             val taskId = taskDao.insertTask(task)
             val insertedTask = task.copy(id = taskId)
 
             // Schedule the alarm
-            alarmScheduler.scheduleAlarm(insertedTask)
+            persistScheduleResult(insertedTask, alarmScheduler.scheduleAlarm(insertedTask))
         }
     }
 
@@ -93,7 +107,7 @@ class SchedulerViewModel @Inject constructor(
             taskDao.updateTask(updatedTask)
 
             if (updatedTask.isEnabled) {
-                alarmScheduler.scheduleAlarm(updatedTask)
+                persistScheduleResult(updatedTask, alarmScheduler.scheduleAlarm(updatedTask))
             } else {
                 alarmScheduler.cancelAlarm(updatedTask)
             }
@@ -103,27 +117,50 @@ class SchedulerViewModel @Inject constructor(
     /**
      * Update an existing task
      */
-    fun updateTask(task: ScheduledTask, songUri: String, songTitle: String, hour: Int, minute: Int, targetVolume: Float, repeatDays: String) {
+    fun updateTask(
+        task: ScheduledTask,
+        contentType: String,
+        contentUris: List<String>,
+        contentTitle: String,
+        hour: Int,
+        minute: Int,
+        targetVolume: Float,
+        repeatDays: String,
+        stopAfterMinutes: Int,
+        fadeInSeconds: Int
+    ) {
         viewModelScope.launch {
             // Cancel old alarm
             alarmScheduler.cancelAlarm(task)
             
             // Create updated task object
             val updatedTask = task.copy(
-                songUri = songUri,
-                songTitle = songTitle,
+                songUri = contentUris.first(),
+                songTitle = contentTitle,
                 hour = hour,
                 minute = minute,
                 isEnabled = true, // Re-enable on edit? Usually yes.
                 targetVolume = targetVolume,
-                repeatDays = repeatDays
+                repeatDays = repeatDays,
+                contentType = contentType,
+                contentUris = contentUris.joinToString("\n"),
+                stopAfterMinutes = stopAfterMinutes,
+                fadeInSeconds = fadeInSeconds
             )
 
             // Update DB
             taskDao.updateTask(updatedTask)
 
             // Schedule new alarm
-            alarmScheduler.scheduleAlarm(updatedTask)
+            persistScheduleResult(updatedTask, alarmScheduler.scheduleAlarm(updatedTask))
+        }
+    }
+
+    private suspend fun persistScheduleResult(task: ScheduledTask, nextRunAt: Long?) {
+        if (nextRunAt == null) {
+            taskDao.updateRunState(task.id, task.lastRunAt, "NEEDS_PERMISSION", "", 0, 0)
+        } else {
+            taskDao.updateSchedulingState(task.id, nextRunAt, "READY")
         }
     }
 

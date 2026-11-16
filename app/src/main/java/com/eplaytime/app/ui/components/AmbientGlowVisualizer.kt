@@ -4,6 +4,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -11,6 +12,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import kotlin.math.cos
 import kotlin.math.sin
+import com.eplaytime.app.util.VisualizerHelper
 
 /**
  * AmbientGlowVisualizer - YouTube-Style Music-Reactive Ambient Mode
@@ -26,24 +28,18 @@ import kotlin.math.sin
 fun AmbientGlowVisualizer(
     primaryColor: Color,
     secondaryColor: Color,
-    bassMagnitude: Float,
-    audioEnergy: Float,
+    visualizerHelper: VisualizerHelper,
     isPlaying: Boolean,
     isZenMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "ambient_glow_phase")
-    val phase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (Math.PI * 2).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(14000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ambient_phase"
-    )
-
+    val bassMagnitudeState = visualizerHelper.bassMagnitude.collectAsState()
+    val audioEnergyState = visualizerHelper.energy.collectAsState()
     Canvas(modifier = modifier.fillMaxSize()) {
+        // State is intentionally read in draw phase so animation ticks redraw this layer only.
+        val bassMagnitude = bassMagnitudeState.value
+        val audioEnergy = audioEnergyState.value
+        val phase = (audioEnergy * Math.PI.toFloat() * 2f) + (bassMagnitude * 0.9f)
         val w = size.width
         val h = size.height
 

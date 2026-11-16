@@ -65,6 +65,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Cheap launch-time reconciliation repairs schedules lost to OEM cleanup or app updates.
+        androidx.work.WorkManager.getInstance(this).enqueueUniqueWork(
+            "schedule_launch_reconciliation",
+            androidx.work.ExistingWorkPolicy.KEEP,
+            androidx.work.OneTimeWorkRequestBuilder<com.eplaytime.app.worker.BootRescheduleWorker>()
+                .build()
+        )
+
         // Enable edge-to-edge
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -179,6 +187,7 @@ private fun MainNavigation() {
                     onNavigateToPlayer = { navController.navigate("player") },
                     onNavigateToAbout = { navController.navigate("about") },
                     onNavigateToQueue = { navController.navigate("queue") },
+                    onNavigateToRadio = { navController.navigate("radio") },
                     onNavigateToFolder = { path -> 
                         val encodedPath = Uri.encode(path)
                         navController.navigate("folders?path=$encodedPath") 
@@ -188,6 +197,13 @@ private fun MainNavigation() {
 
             composable("scheduler") {
                 com.eplaytime.app.ui.screens.SchedulerScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    musicViewModel = sharedViewModel
+                )
+            }
+
+            composable("radio") {
+                com.eplaytime.app.ui.screens.RadioScreen(
                     onNavigateBack = { navController.popBackStack() },
                     musicViewModel = sharedViewModel
                 )
@@ -211,6 +227,8 @@ private fun MainNavigation() {
                 val path = backStackEntry.arguments?.getString("path")
                 com.eplaytime.app.ui.screens.FolderScreen(
                     onNavigateBack = { navController.popBackStack() },
+                    onNavigateToPlayer = { navController.navigate("player") },
+                    onNavigateToRadio = { navController.navigate("radio") },
                     viewModel = sharedViewModel,
                     initialFolderPath = path
                 )

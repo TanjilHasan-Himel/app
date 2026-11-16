@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.eplaytime.app.data.model.Song
 import kotlinx.coroutines.flow.Flow
 
@@ -20,6 +21,15 @@ interface SongDao {
 
     @Query("DELETE FROM songs")
     suspend fun deleteAll()
+
+    @Query("SELECT COUNT(*) FROM songs")
+    suspend fun countSongs(): Int
+
+    @Transaction
+    suspend fun replaceAll(songs: List<Song>) {
+        deleteAll()
+        insertAll(songs)
+    }
     
     @Query("SELECT * FROM songs WHERE id = :id")
     suspend fun getSongById(id: Long): Song?

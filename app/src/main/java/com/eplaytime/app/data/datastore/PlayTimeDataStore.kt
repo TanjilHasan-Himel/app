@@ -72,6 +72,8 @@ class PlayTimeDataStore @Inject constructor(
         val BASS_BOOST_STRENGTH = intPreferencesKey("bass_boost_strength")
         val VIRTUALIZER_STRENGTH = intPreferencesKey("virtualizer_strength")
         val EQ_BANDS_LEVELS = stringPreferencesKey("eq_bands_levels")
+        val FIREBASE_ANALYTICS_ENABLED = booleanPreferencesKey("firebase_analytics_enabled")
+        val FIREBASE_CRASHLYTICS_ENABLED = booleanPreferencesKey("firebase_crashlytics_enabled")
     }
 
     private fun routePositionKey(songUri: String, route: String): Preferences.Key<Long> {
@@ -518,6 +520,26 @@ class PlayTimeDataStore @Inject constructor(
     suspend fun setEqBandsLevels(levels: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.EQ_BANDS_LEVELS] = levels
+        }
+    }
+
+    val isAnalyticsEnabled: Flow<Boolean> = context.dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { prefs -> prefs[Keys.FIREBASE_ANALYTICS_ENABLED] ?: true }
+
+    suspend fun setAnalyticsEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.FIREBASE_ANALYTICS_ENABLED] = enabled
+        }
+    }
+
+    val isCrashlyticsEnabled: Flow<Boolean> = context.dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { prefs -> prefs[Keys.FIREBASE_CRASHLYTICS_ENABLED] ?: true }
+
+    suspend fun setCrashlyticsEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.FIREBASE_CRASHLYTICS_ENABLED] = enabled
         }
     }
 }
