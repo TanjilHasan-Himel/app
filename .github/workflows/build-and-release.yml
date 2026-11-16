@@ -64,7 +64,7 @@ jobs:
           echo "AUDIA_KEY_ALIAS=${{ secrets.AUDIA_KEY_ALIAS }}" >> $GITHUB_ENV
           echo "AUDIA_KEY_PASSWORD=${{ secrets.AUDIA_KEY_PASSWORD }}" >> $GITHUB_ENV
 
-      - name: Determine Target Build Task
+      - name: Determine Target Build Task & Release Tag
         id: target_task
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]] || [[ "${{ inputs.build_release }}" == "true" ]]; then
@@ -73,6 +73,12 @@ jobs:
           else
             echo "task=:app:assembleDebug" >> $GITHUB_OUTPUT
             echo "mode=debug" >> $GITHUB_OUTPUT
+          fi
+
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "release_tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "release_tag=v9.1.0" >> $GITHUB_OUTPUT
           fi
 
       - name: Build APK (${{ steps.target_task.outputs.mode }})
@@ -117,10 +123,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           repository: TanjilHasan-Himel/app
+          token: ${{ secrets.PUBLIC_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          tag_name: ${{ steps.target_task.outputs.release_tag }}
+          target_commitish: main
+          name: Audia ${{ steps.target_task.outputs.release_tag }}
           files: |
             ${{ steps.prepare_artifacts.outputs.primary_apk }}
             ${{ steps.prepare_artifacts.outputs.latest_apk }}
           generate_release_notes: true
           make_latest: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN || secrets.GITHUB_TOKEN }}
