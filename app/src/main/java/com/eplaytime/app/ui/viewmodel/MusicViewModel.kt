@@ -22,6 +22,9 @@ import com.eplaytime.app.data.model.SongWikiData
 import com.eplaytime.app.data.network.LrcLibClient
 import com.eplaytime.app.data.network.LyricsCandidate
 import com.eplaytime.app.playback.playbackQueue
+import com.eplaytime.app.data.model.Playlist
+import com.eplaytime.app.data.model.PlaylistItem
+import com.eplaytime.app.data.repository.PlaylistRepository
 import com.eplaytime.app.data.network.SongWikiClient
 import com.eplaytime.app.data.repository.Album
 import com.eplaytime.app.data.repository.Artist
@@ -58,6 +61,7 @@ class MusicViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val musicRepository: MusicRepository,
     private val favoritesRepository: FavoritesRepository,
+    private val playlistRepository: PlaylistRepository,
     private val dataStore: PlayTimeDataStore
 ) : ViewModel() {
 
@@ -1888,6 +1892,149 @@ class MusicViewModel @Inject constructor(
             }
         }
         toRemove.sortedDescending().forEach { controller.removeMediaItem(it) }
+    }
+
+    // ==========================================
+    // Phase L2: Persistent Playlists & M3U Engine
+    // ==========================================
+
+    val allPlaylists: StateFlow<List<Playlist>> =
+        playlistRepository.allPlaylists.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            emptyList()
+        )
+
+    fun createPlaylist(name: String, description: String = "", onCreated: ((Long) -> Unit)? = null) {
+        viewModelScope.launch {
+            val id = playlistRepository.createPlaylist(name, description)
+            showInAppNotification("Created playlist '$name'")
+            onCreated?.invoke(id)
+        }
+    }
+
+    fun renamePlaylist(playlistId: Long, newName: String) {
+        viewModelScope.launch {
+            playlistRepository.renamePlaylist(playlistId, newName)
+            showInAppNotification("Playlist renamed")
+        }
+    }
+
+    fun deletePlaylist(playlistId: Long) {
+        viewModelScope.launch {
+            playlistRepository.deletePlaylist(playlistId)
+            showInAppNotification("Playlist deleted")
+        }
+    }
+
+    fun addSongsToPlaylist(playlistId: Long, songs: List<Song>, onAdded: ((Int) -> Unit)? = null) {
+        viewModelScope.launch {
+            val count = playlistRepository.addSongsToPlaylist(playlistId, songs)
+            showInAppNotification("Added $count songs to playlist")
+            onAdded?.invoke(count)
+        }
+    }
+
+    fun removePlaylistItem(playlistId: Long, itemId: Long) {
+        viewModelScope.launch {
+            playlistRepository.removePlaylistItem(playlistId, itemId)
+            showInAppNotification("Song removed from playlist")
+        }
+    }
+
+    fun reorderPlaylist(playlistId: Long, items: List<PlaylistItem>) {
+        viewModelScope.launch {
+            playlistRepository.reorderPlaylist(playlistId, items)
+        }
+    }
+
+    fun getPlaylistItems(playlistId: Long): kotlinx.coroutines.flow.Flow<List<PlaylistItem>> {
+        return playlistRepository.getPlaylistItems(playlistId)
+    }
+
+    fun playPlaylist(
+        playlistId: Long,
+        items: List<PlaylistItem>,
+        startSongUri: String? = null,
+        shuffle: Boolean = false
+    ) {
+        if (items.isEmpty()) {
+            showInAppNotification("Playlist is empty")
+            return
+        }
+        val libraryMap = _songList.value.associateBy { it.uri }
+        val songs = items.map { it.toSong(libraryMap) }
+        val targetQueue = if (shuffle) songs.shuffled() else songs
+        val targetUri = startSongUri ?: targetQueue.firstOrNull()?.uri ?: return
+        playSongInQueue(targetQueue, targetUri)
+    }
+
+    private fun PlaylistItem.toSong(libraryMap: Map<String, Song>): Song {
+        return libraryMap[songUri] ?: Song(
+            id = if (songId > 0) songId else (songUri.hashCode().toLong() and 0x7FFFFFFF),
+            title = title,
+            artist = artist,
+            album = album,
+            uri = songUri,
+            duration = duration,
+            albumArtUri = albumArtUri
+        )
+    }
+
+    fun exportPlaylistToM3u(
+        playlistId: Long,
+        outputStream: java.io.OutputStream,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val content = playlistRepository.exportPlaylistToM3u(playlistId)
+                outputStream.use { stream ->
+                    stream.write(content.toByteArray(Charsets.UTF_8))
+                    stream.flush()
+                }
+                withContext(Dispatchers.Main) {
+                    showInAppNotification("Playlist exported successfully")
+                    onSuccess()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    val msg = e.localizedMessage ?: "Failed to export playlist"
+                    showInAppNotification(msg)
+                    onError(msg)
+                }
+            }
+        }
+    }
+
+    fun importPlaylistFromM3u(
+        name: String,
+        inputStream: java.io.InputStream,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val content = inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val resolvedName = name.ifBlank { "Imported Playlist" }
+                val playlistId = playlistRepository.importM3u(
+                    name = resolvedName,
+                    m3uContent = content,
+                    knownSongs = _songList.value
+                )
+                withContext(Dispatchers.Main) {
+                    showInAppNotification("Imported playlist '$resolvedName'")
+                    onSuccess(resolvedName)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    val msg = e.localizedMessage ?: "Failed to import playlist"
+                    showInAppNotification(msg)
+                    onError(msg)
+                }
+            }
+        }
     }
 
     /**

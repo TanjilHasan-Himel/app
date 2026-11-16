@@ -67,6 +67,7 @@ fun SongGarageBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
+    var showAddToPlaylistDialog by remember { mutableStateOf(false) }
     val tabs = listOf("Trimmer", "Tag Studio", "Sound Tweaker", "Tech Specs")
 
     ModalBottomSheet(
@@ -130,16 +131,32 @@ fun SongGarageBottomSheet(
                     }
                 }
 
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { showAddToPlaylistDialog = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlaylistAdd,
+                            contentDescription = "Add to Playlist",
+                            tint = SoftGold,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
@@ -193,6 +210,14 @@ fun SongGarageBottomSheet(
                 3 -> TechSpecsTab(song = song, context = context, viewModel = viewModel, onOpenWiki = onOpenWiki)
             }
         }
+    }
+
+    if (showAddToPlaylistDialog) {
+        AddToPlaylistDialog(
+            song = song,
+            viewModel = viewModel,
+            onDismiss = { showAddToPlaylistDialog = false }
+        )
     }
 }
 

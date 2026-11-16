@@ -66,6 +66,9 @@ import com.eplaytime.app.ui.components.RadioMiniPlayer
 import com.eplaytime.app.ui.components.ScanFiltersBottomSheet
 import com.eplaytime.app.ui.components.SettingsDialog
 import com.eplaytime.app.ui.components.SongList
+import com.eplaytime.app.ui.components.AddToPlaylistDialog
+import com.eplaytime.app.ui.screens.PlaylistDetailScreen
+import com.eplaytime.app.ui.screens.home.PlaylistList
 import com.eplaytime.app.ui.screens.home.*
 import com.eplaytime.app.ui.theme.*
 import com.eplaytime.app.ui.viewmodel.MusicViewModel
@@ -152,6 +155,10 @@ fun HomeScreen(
     val hasNewSongs by viewModel.hasNewSongs.collectAsState()
     val userName by viewModel.userName.collectAsState()
     val audioSessionId by viewModel.audioSessionId.collectAsState()
+    val allPlaylists by viewModel.allPlaylists.collectAsState()
+
+    var activePlaylistId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var songForPlaylistDialog by remember { mutableStateOf<Song?>(null) }
 
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showScanFiltersSheet by remember { mutableStateOf(false) }
@@ -234,7 +241,7 @@ fun HomeScreen(
     }
 
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
-    val tabs = remember { listOf("Tracks", "Folders", "Albums", "Artists", "Favorites") }
+    val tabs = remember { listOf("Tracks", "Playlists", "Folders", "Albums", "Artists", "Favorites") }
 
     LaunchedEffect(selectedTabIndex) {
         val tabName = tabs.getOrNull(selectedTabIndex) ?: "Tracks"
@@ -251,6 +258,15 @@ fun HomeScreen(
         }
     }
 
+    val filteredPlaylists = remember(allPlaylists, searchQuery.text) {
+        val query = searchQuery.text.trim().lowercase(Locale.US)
+        if (query.isEmpty()) allPlaylists
+        else allPlaylists.filter {
+            it.name.lowercase(Locale.US).contains(query) ||
+            it.description.lowercase(Locale.US).contains(query)
+        }
+    }
+
     val filteredSongs = remember(
         songList,
         searchQuery.text,
@@ -260,7 +276,7 @@ fun HomeScreen(
         val query = searchQuery.text.trim().lowercase(Locale.US)
         val favoriteUris = allFavorites.asSequence().map { it.uri }.toHashSet()
         val baseList = when (selectedTabIndex) {
-            4 -> songList.filter { song -> song.uri in favoriteUris }
+            5 -> songList.filter { song -> song.uri in favoriteUris }
             else -> songList
         }
         if (query.isEmpty()) baseList
@@ -433,6 +449,17 @@ fun HomeScreen(
                 }
             }
         }
+        return
+    }
+
+    if (activePlaylistId != null) {
+        BackHandler { activePlaylistId = null }
+        PlaylistDetailScreen(
+            playlistId = activePlaylistId!!,
+            viewModel = viewModel,
+            onBackClick = { activePlaylistId = null },
+            onNavigateToPlayer = onNavigateToPlayer
+        )
         return
     }
 
@@ -614,6 +641,14 @@ fun HomeScreen(
                     )
                 }
 
+                if (songForPlaylistDialog != null) {
+                    AddToPlaylistDialog(
+                        song = songForPlaylistDialog!!,
+                        viewModel = viewModel,
+                        onDismiss = { songForPlaylistDialog = null }
+                    )
+                }
+
                 // Category Tabs
                 ScrollableTabRow(
                     selectedTabIndex = selectedTabIndex,
@@ -651,6 +686,7 @@ fun HomeScreen(
                 }
                 
                 val tracksListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+                val playlistsListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
                 val foldersListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
                 val albumsListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
                 val artistsListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
@@ -677,6 +713,7 @@ fun HomeScreen(
                                             viewModel.playSongInQueue(filteredSongs, song.uri)
                                             onNavigateToPlayer()
                                         },
+                                        onSongMoreClick = { songForPlaylistDialog = it },
                                         state = tracksListState
                                     )
                                 } else {
@@ -698,6 +735,14 @@ fun HomeScreen(
                                 }
                             }
                             1 -> {
+                                PlaylistList(
+                                    playlists = filteredPlaylists,
+                                    onPlaylistClick = { playlist -> activePlaylistId = playlist.id },
+                                    viewModel = viewModel,
+                                    state = playlistsListState
+                                )
+                            }
+                            2 -> {
                                 if (filteredFolders.isEmpty()) EmptyState(if (searchQuery.text.isNotBlank()) "No matching folders" else "No folders found")
                                 else FolderList(
                                     folders = filteredFolders,
@@ -705,7 +750,7 @@ fun HomeScreen(
                                     state = foldersListState
                                 )
                             }
-                            2 -> {
+                            3 -> {
                                 if (filteredAlbums.isEmpty()) EmptyState(if (searchQuery.text.isNotBlank()) "No matching albums" else "No albums found")
                                 else AlbumList(
                                     albums = filteredAlbums,
@@ -721,7 +766,7 @@ fun HomeScreen(
                                     state = albumsListState
                                 )
                             }
-                            3 -> {
+                            4 -> {
                                 if (filteredArtists.isEmpty()) EmptyState(if (searchQuery.text.isNotBlank()) "No matching artists" else "No artists found")
                                 else ArtistList(
                                     artists = filteredArtists,
@@ -737,7 +782,7 @@ fun HomeScreen(
                                     state = artistsListState
                                 )
                             }
-                            4 -> {
+                            5 -> {
                                 if (filteredSongs.isEmpty()) EmptyState("No favorites yet")
                                 else SongList(
                                     songs = filteredSongs,
@@ -748,6 +793,7 @@ fun HomeScreen(
                                             onNavigateToPlayer()
                                         }
                                     },
+                                    onSongMoreClick = { songForPlaylistDialog = it },
                                     state = favoritesListState
                                 )
                             }

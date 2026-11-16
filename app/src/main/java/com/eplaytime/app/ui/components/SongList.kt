@@ -13,6 +13,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,6 +46,7 @@ fun SongList(
     currentSongId: Long?,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier,
+    onSongMoreClick: ((Song) -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(bottom = 120.dp),
     state: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState()
 ) {
@@ -155,6 +160,7 @@ fun SongList(
                     song = song,
                     isCurrentlyPlaying = song.id == currentSongId,
                     onClick = { onSongClick(song) },
+                    onMoreClick = onSongMoreClick?.let { callback -> { callback(song) } },
                     modifier = itemModifier
                 )
             }
@@ -170,6 +176,7 @@ fun SongListItem(
     song: Song,
     isCurrentlyPlaying: Boolean,
     onClick: () -> Unit,
+    onMoreClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -238,6 +245,20 @@ fun SongListItem(
             fontSize = 12.sp,
             color = TextTertiary
         )
+
+        if (onMoreClick != null) {
+            IconButton(
+                onClick = onMoreClick,
+                modifier = Modifier.size(32.dp).padding(start = 4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Options",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
     }
 }
 

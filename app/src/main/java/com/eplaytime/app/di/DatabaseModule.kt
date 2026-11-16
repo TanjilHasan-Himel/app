@@ -36,7 +36,8 @@ object DatabaseModule {
                 PlayTimeDatabase.MIGRATION_6_8,
                 PlayTimeDatabase.MIGRATION_7_8,
                 PlayTimeDatabase.MIGRATION_8_9,
-                PlayTimeDatabase.MIGRATION_9_10
+                PlayTimeDatabase.MIGRATION_9_10,
+                PlayTimeDatabase.MIGRATION_10_11
             )
             .build()
     }
@@ -66,5 +67,23 @@ object DatabaseModule {
     @Provides
     fun provideScheduledTaskDao(database: PlayTimeDatabase): com.eplaytime.app.data.dao.ScheduledTaskDao {
         return database.scheduledTaskDao()
+    }
+
+    /**
+     * Provide PlaylistDao from database
+     */
+    @Singleton
+    @Provides
+    fun providePlaylistDao(database: PlayTimeDatabase): com.eplaytime.app.data.dao.PlaylistDao {
+        return database.playlistDao()
+    }
+
+    /**
+     * Provide SavedQueueDao from database
+     */
+    @Singleton
+    @Provides
+    fun provideSavedQueueDao(database: PlayTimeDatabase): com.eplaytime.app.data.dao.SavedQueueDao {
+        return database.savedQueueDao()
     }
 }

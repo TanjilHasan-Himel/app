@@ -140,5 +140,42 @@ the F0 gate evidence is recorded.
 - Test Android Auto on Desktop Head Unit (DHU) or physical vehicle.
 - Bump version to `v9.1.1` and trigger release workflow upon user sign-off.
 
+## Phase L2: Persistent Playlists, M3U Import/Export & Android Auto Integration — 2026-11-17
+
+### 1. Delivery & Implementation
+- **Room Database v11 Migration & Entities:**
+  - Designed and executed `MIGRATION_10_11` in `PlayTimeDatabase.kt`:
+    - `playlists` table (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT, `createdAt` INTEGER, `updatedAt` INTEGER, `description` TEXT, `customArtUri` TEXT).
+    - `playlist_items` table (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `playlistId` INTEGER with FK CASCADE, `songId` TEXT, `songUri` TEXT, `title` TEXT, `artist` TEXT, `album` TEXT, `duration` INTEGER, `albumArtUri` TEXT, `position` INTEGER, `addedAt` INTEGER, UNIQUE index on `playlistId, position`).
+    - `saved_queues` and `saved_queue_items` tables for queue snapshot persistence.
+  - Implemented Room DAOs: `PlaylistDao.kt` and `SavedQueueDao.kt`.
+  - Registered DAOs and migration in `PlayTimeDatabase.kt` and `DatabaseModule.kt`.
+- **Repository & M3U Parser/Writer Engine:**
+  - Implemented `M3uHelper.kt` supporting standard Extended M3U (`#EXTM3U`, `#EXTINF:<seconds>,<artist> - <title>`, URI parsing and resolution).
+  - Built comprehensive JVM test suite `M3uHelperTest.kt` verifying serialization and deserialization edge cases.
+  - Implemented `PlaylistRepository.kt`: full CRUD, `addSongsToPlaylist`, `removePlaylistItem`, `reorderPlaylist`, `exportPlaylistToM3u`, `importM3u`, and `saveActiveQueue`.
+- **UI Components & User Experience:**
+  - Added "Playlists" category tab to `HomeScreen.kt` (`Tracks`, `Playlists`, `Folders`, `Albums`, `Artists`, `Favorites`).
+  - Created `PlaylistList.kt`: Playlist card layout displaying artwork, title, last updated timestamp, create new playlist, edit/rename, delete, export M3U, and import `.m3u`/`.m3u8` file picker launcher.
+  - Created `PlaylistDetailScreen.kt`: Header with artwork, Play All, Shuffle, "+ Add Songs" multi-select dialog, song list with position up/down reordering, remove, and M3U export.
+  - Integrated `AddToPlaylistDialog.kt` across the app, invoked from `SongGarageBottomSheet.kt` ("+ Add to Playlist") and `SongList.kt` (3-dots item menu).
+- **Android Auto Media Hierarchy Integration:**
+  - Added `category_playlists` node under root in `MusicService.kt`.
+  - Implemented browsable and playable playlist items in `onGetChildren` and `onAddMediaItems`, allowing direct playback of user playlists in Android Auto car head units.
+
+### 2. Verification Evidence
+- **JVM Unit Tests:**
+  `.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug` — **`BUILD SUCCESSFUL in 5m 39s`**
+  - Unit tests executed: 11 test suites (including `M3uHelperTest`, `PlaybackQueueUnitTest`, `ScheduledOccurrenceCalculatorTest`, `RadioBrowserClientTest`, `SongWikiUnitTest`, `LyricsCandidateScorerTest`, `LrcParserTest`, `BiquadFilterTest`, `MusicFilterUnitTest`), 100% passed.
+- **Physical Device Smoke Test (Samsung Galaxy M31 `R58N72BVFVD`):**
+  - Streamed install of `Audia-v9.1.0-debug.apk` succeeded.
+  - `MainActivity` launched (PID 374), DataStore state restored cleanly, proactive audioSessionId 4321 initialized, zero crashes or Room migration exceptions observed in logcat.
+
+### 3. Canonical Next Actions
+- Commit Phase L2 implementation to `main`.
+- Bump version to `v9.1.1` in `app/version.properties` and tag `v9.1.1`.
+- Push to remote to trigger the fixed GitHub Actions CI/CD release workflow to deploy `v9.1.1` directly to `TanjilHasan-Himel/app`.
+
+
 
 

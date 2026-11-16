@@ -22,6 +22,8 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.eplaytime.app.data.repository.MusicRepository
+import com.eplaytime.app.data.dao.PlaylistDao
+import com.eplaytime.app.data.model.Playlist
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
@@ -55,6 +57,7 @@ class MusicService : MediaLibraryService() {
         // Android Auto & MediaBrowser navigation constants
         const val MEDIA_ROOT_ID = "root"
         const val MEDIA_CATEGORY_TRACKS = "category_tracks"
+        const val MEDIA_CATEGORY_PLAYLISTS = "category_playlists"
         const val MEDIA_CATEGORY_ALBUMS = "category_albums"
         const val MEDIA_CATEGORY_ARTISTS = "category_artists"
         const val MEDIA_CATEGORY_FAVORITES = "category_favorites"
@@ -64,6 +67,8 @@ class MusicService : MediaLibraryService() {
     lateinit var musicRepository: MusicRepository
     @Inject
     lateinit var favoritesRepository: com.eplaytime.app.data.repository.FavoritesRepository
+    @Inject
+    lateinit var playlistDao: com.eplaytime.app.data.dao.PlaylistDao
     @Inject
     lateinit var scheduledTaskDao: com.eplaytime.app.data.dao.ScheduledTaskDao
 
@@ -495,6 +500,7 @@ class MusicService : MediaLibraryService() {
             MEDIA_ROOT_ID -> {
                 listOf(
                     buildBrowsableItem(MEDIA_CATEGORY_TRACKS, "All Songs", "${songs.size} tracks"),
+                    buildBrowsableItem(MEDIA_CATEGORY_PLAYLISTS, "Playlists", "Custom playlists"),
                     buildBrowsableItem(MEDIA_CATEGORY_ALBUMS, "Albums", "Browse by album"),
                     buildBrowsableItem(MEDIA_CATEGORY_ARTISTS, "Artists", "Browse by artist"),
                     buildBrowsableItem(MEDIA_CATEGORY_FAVORITES, "Favorites", "${favorites.size} tracks")
@@ -502,6 +508,20 @@ class MusicService : MediaLibraryService() {
             }
             MEDIA_CATEGORY_TRACKS -> {
                 songs.map { songToMediaItem(it) }
+            }
+            MEDIA_CATEGORY_PLAYLISTS -> {
+                val playlists: List<Playlist> = try {
+                    playlistDao.getAllPlaylists().firstOrNull() ?: emptyList()
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                playlists.map { playlist ->
+                    buildBrowsableItem(
+                        "playlist_${playlist.id}",
+                        playlist.name,
+                        playlist.description.ifBlank { "Playlist" }
+                    )
+                }
             }
             MEDIA_CATEGORY_FAVORITES -> {
                 favorites.map { favoriteToMediaItem(it) }
@@ -546,6 +566,29 @@ class MusicService : MediaLibraryService() {
                     parentId.startsWith("artist_") -> {
                         val artistName = parentId.removePrefix("artist_")
                         songs.filter { it.artist == artistName }.map { songToMediaItem(it) }
+                    }
+                    parentId.startsWith("playlist_") -> {
+                        val playlistId = parentId.removePrefix("playlist_").toLongOrNull() ?: return emptyList()
+                        val items = try {
+                            playlistDao.getPlaylistItemsDirect(playlistId)
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                        items.map { item ->
+                            val mediaMetadata = androidx.media3.common.MediaMetadata.Builder()
+                                .setTitle(item.title)
+                                .setArtist(item.artist)
+                                .setAlbumTitle(item.album)
+                                .setArtworkUri(item.albumArtUri?.let { Uri.parse(it) })
+                                .setIsBrowsable(false)
+                                .setIsPlayable(true)
+                                .build()
+                            MediaItem.Builder()
+                                .setMediaId("song_${item.songId}")
+                                .setUri(item.songUri)
+                                .setMediaMetadata(mediaMetadata)
+                                .build()
+                        }
                     }
                     else -> emptyList()
                 }
