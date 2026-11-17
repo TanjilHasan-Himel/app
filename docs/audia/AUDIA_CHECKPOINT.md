@@ -275,6 +275,17 @@ the F0 gate evidence is recorded.
 - Update `v9.1.1` tag and push to `origin/main` and `origin v9.1.1`.
 - Clean install on test device to transition to the permanent production signature.
 
+## CI/CD Workflow Syntax Fix & Release Pipeline Execution — 2026-11-17
+
+### 1. Delivery & Implementation
+- **GitHub Actions Syntax Fix:**
+  - Resolved workflow validation failure on run #8 caused by `${{ secrets.* }}` placed directly inside an `if:` condition.
+  - Removed the obsolete keystore decoding step since `app/keystore/audia-release.jks` is committed directly to the private repository and picked up automatically by Gradle.
+- **Workflow Run #9 Triggered:**
+  - Pushed fix in commit `d8e7a45` and updated `v9.1.1` tag (`ae1a5df`).
+  - Active GitHub Actions workflow run `44021531934` (Run #9) accepted and executing tests & release build.
+
+
 
 
 
