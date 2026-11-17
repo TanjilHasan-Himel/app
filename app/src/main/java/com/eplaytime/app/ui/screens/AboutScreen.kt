@@ -48,8 +48,8 @@ fun AboutScreen(
         FirebaseDiagnostics.recordScreen(context, "AboutScreen")
     }
     val currentYear = Calendar.getInstance().get(Calendar.YEAR)
-    val versionName = BuildConfig.VERSION_NAME ?: "1.0.0"
-    val releaseDate = "November 8, 2026"
+    val versionName = BuildConfig.VERSION_NAME ?: "9.1.2"
+    val releaseDate = "November 17, 2026"
     
     // State for Legal Dialogs
     var showEula by remember { mutableStateOf(false) }

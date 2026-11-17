@@ -307,9 +307,33 @@ the F0 gate evidence is recorded.
   - Command: `.\gradlew.bat :app:assembleDebug` — **`BUILD SUCCESSFUL in 1m 36s`** (`Audia-v9.1.2-debug.apk` successfully generated).
 
 ### 3. Canonical Next Actions
-- Verify assembleDebug completion.
 - Commit all changes cleanly.
 - Create and push release tag `v9.1.2` to trigger CI/CD production release.
+
+## Legal Documentation, Privacy Policy & Version Date Alignment — 2026-11-17
+
+### 1. Delivery & Implementation
+- **EULA and Privacy Policy Production Draft (`Legals.kt`):**
+  - Updated agreement headers to **Audia Player Version 9.1.2**, dated **November 17, 2026**.
+  - Documented features: Persistent Playlists with M3U/M3U8 export/import, Android Auto media tree, scheduled playback recovery, synced lyrics via LRCLIB, and community internet radio via Radio Browser.
+  - Transparently disclosed the In-App Automated Update Engine (24h Fastly CDN/GitHub release check).
+  - Transparently disclosed Firebase Crashlytics & Analytics telemetry with user toggle controls in Settings.
+  - Reaffirmed that audio processing for the live visualizer occurs strictly in device memory without recording or storing microphone audio.
+- **In-App About Screen Alignment (`AboutScreen.kt`):**
+  - Updated release date to `November 17, 2026` and version display to `9.1.2`.
+- **Public Showcase Alignment:**
+  - Synchronized `version.json` on Fastly CDN to `v9.1.2` (code `93`).
+
+### 2. Verification Evidence
+- **Kotlin Compilation:**
+  - Command: `.\gradlew.bat :app:compileDebugKotlin` — **`BUILD SUCCESSFUL in 1m 5s`**
+- **Unit Tests:**
+  - Command: `.\gradlew.bat :app:testDebugUnitTest` — **`BUILD SUCCESSFUL in 47s`** (all 53 tests passed).
+
+### 3. Canonical Next Actions
+- Commit legal and version documentation updates.
+- Retag `v9.1.2` and push to remote.
+
 
 
 
