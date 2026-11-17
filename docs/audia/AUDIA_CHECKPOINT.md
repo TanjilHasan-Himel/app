@@ -71,6 +71,7 @@ the F0 gate evidence is recorded.
 ## Release CI/CD, Distribution & Physical Telemetry Gate — 2026-11-16
 
 ### 1. Delivery & Infrastructure
+
 - **Automated Gradle APK Naming:**
   Configured `app/build.gradle.kts` with dynamic variant output naming:
   `Audia-v<version>.apk` for Release (no redundant `-release` suffix) and `Audia-v<version>-debug.apk` for Debug.
@@ -85,18 +86,21 @@ the F0 gate evidence is recorded.
   - Release APK size: 4,710,910 bytes (~4.7 MB) with R8 full minification and resource shrinking.
 
 ### 2. Physical Device Telemetry Verification
+
 - Verified Firebase Crashlytics on physical Samsung Galaxy M31 (`SM-M315F`).
 - Verified Firebase Analytics in Firebase Console DebugView (6 active events verified from real device).
 - Cleaned up ADB debug property post-test (`debug.firebase.analytics.app .none.`).
 - Confirmed external backend dashboard is YAGNI for current single-developer phase.
 
 ### 3. Android Auto Baseline Audit
+
 - Inspected `app/src/main/java/com/eplaytime/app/service/MusicService.kt`:
   - `onGetLibraryRoot`: Returns root node with `isBrowsable = true`.
   - `onGetChildren`: Currently hardcoded to return `ImmutableList.of()` (empty list).
   - Status: Transport controls and lockscreen session work, but Android Auto / Car Head Unit media browsing currently displays an empty library. This constitutes Roadmap Phase A1.
 
 ### 4. Canonical Next Actions
+
 1. **F0C Persistence and Security:**
    - Room schema export and automated v8→v9→v10 migration tests.
    - Restrict custom `ACTION_GET_AUDIO_SESSION_ID` command to internal controller.
@@ -109,6 +113,7 @@ the F0 gate evidence is recorded.
 ## Security Hardening (F0C) & Real Android Auto Media Tree (A1) — 2026-11-16
 
 ### 1. Delivery & Implementation
+
 - **Public Showcase README Deployed:**
   - Pushed ultra-high-converting, SEO & GEO-optimized `README.md` directly to `https://github.com/TanjilHasan-Himel/app.git` (`5be8e22..8d9d504 HEAD -> main`).
   - Integrated 1-click golden direct download badge linking to permanent `Audia-latest.apk`.
@@ -131,11 +136,13 @@ the F0 gate evidence is recorded.
     - `onSearch` / `onGetSearchResult`: Enables voice and text search across the library.
 
 ### 2. Verification Evidence
+
 - Verification command: `.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug`
 - Result: **`BUILD SUCCESSFUL in 6m 33s`** (53 actionable tasks executed/up-to-date, zero compile errors, all JVM unit tests passed).
 - Output: `app\build\outputs\apk\debug\Audia-v9.1.0-debug.apk` successfully packaged.
 
 ### 3. Canonical Next Actions
+
 - Verify Room database schema export & automated migration test (`v8`→`v9`→`v10`).
 - Test Android Auto on Desktop Head Unit (DHU) or physical vehicle.
 - Bump version to `v9.1.1` and trigger release workflow upon user sign-off.
@@ -143,6 +150,7 @@ the F0 gate evidence is recorded.
 ## Phase L2: Persistent Playlists, M3U Import/Export & Android Auto Integration — 2026-11-17
 
 ### 1. Delivery & Implementation
+
 - **Room Database v11 Migration & Entities:**
   - Designed and executed `MIGRATION_10_11` in `PlayTimeDatabase.kt`:
     - `playlists` table (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT, `createdAt` INTEGER, `updatedAt` INTEGER, `description` TEXT, `customArtUri` TEXT).
@@ -164,6 +172,7 @@ the F0 gate evidence is recorded.
   - Implemented browsable and playable playlist items in `onGetChildren` and `onAddMediaItems`, allowing direct playback of user playlists in Android Auto car head units.
 
 ### 2. Verification Evidence
+
 - **JVM Unit Tests:**
   `.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug` — **`BUILD SUCCESSFUL in 5m 39s`**
   - Unit tests executed: 11 test suites (including `M3uHelperTest`, `PlaybackQueueUnitTest`, `ScheduledOccurrenceCalculatorTest`, `RadioBrowserClientTest`, `SongWikiUnitTest`, `LyricsCandidateScorerTest`, `LrcParserTest`, `BiquadFilterTest`, `MusicFilterUnitTest`), 100% passed.
@@ -172,6 +181,7 @@ the F0 gate evidence is recorded.
   - `MainActivity` launched (PID 374), DataStore state restored cleanly, proactive audioSessionId 4321 initialized, zero crashes or Room migration exceptions observed in logcat.
 
 ### 3. Canonical Next Actions
+
 - Commit Phase L2 implementation to `main`.
 - Bump version to `v9.1.1` in `app/version.properties` and tag `v9.1.1`.
 - Push to remote to trigger the fixed GitHub Actions CI/CD release workflow to deploy `v9.1.1` directly to `TanjilHasan-Himel/app`.
@@ -179,6 +189,7 @@ the F0 gate evidence is recorded.
 ## In-App Auto Update Engine & 2-Day Reminder System — 2026-11-17
 
 ### 1. Delivery & Implementation
+
 - **Fastly CDN & GitHub API Dual-Engine (`AppUpdateManager.kt` & `AppUpdateParser.kt`):**
   - Primary endpoint: `https://raw.githubusercontent.com/TanjilHasan-Himel/app/main/version.json` (Fastly CDN with zero API rate limits, instantaneous global distribution).
   - Secondary fallback: `https://api.github.com/repos/TanjilHasan-Himel/app/releases/latest`.
@@ -197,6 +208,7 @@ the F0 gate evidence is recorded.
   - Pushed `version.json` to public showcase repo `https://github.com/TanjilHasan-Himel/app.git` (`HEAD -> main`).
 
 ### 2. Verification Evidence
+
 - **JVM Unit Tests:**
   `.\gradlew.bat testDebugUnitTest` — **`BUILD SUCCESSFUL in 6m 58s`** (12 test suites, including `AppUpdateManagerTest`, 100% passed).
 - **Physical Device Smoke Test (Samsung Galaxy M31 `R58N72BVFVD`):**
@@ -205,6 +217,7 @@ the F0 gate evidence is recorded.
   - Verified live CDN fetch: `Invoke-RestMethod` to `https://raw.githubusercontent.com/TanjilHasan-Himel/app/main/version.json` returned valid JSON with 0 latency.
 
 ### 3. Canonical Next Actions
+
 - Commit changes to `main`.
 - Push `main` to `origin/main`.
 - Retag `v9.1.1` to include this update engine so the initial release itself is update-aware.
@@ -212,6 +225,7 @@ the F0 gate evidence is recorded.
 ## SQA Hardening, Security Audit & Senior Code Review — 2026-11-17
 
 ### 1. Delivery & Implementation
+
 - **Security Auditor Findings & Fixes:**
   - **SEC-01 (URL Scheme & Host Validation):** Added `isTrustedUpdateUrl` in `AppUpdateParser.kt` strictly enforcing `https://` protocol and allowlisted domains (`github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`) to prevent SSRF and untrusted APK download redirects.
   - **SEC-02 (Network Security Config Expansion):** Added `amazonaws.com`, `fastly.net`, and `crashlytics.com` to `network_security_config.xml` explicitly disallowing cleartext HTTP traffic.
@@ -231,6 +245,7 @@ the F0 gate evidence is recorded.
   - Authored comprehensive edge-case test suites in `AppUpdateManagerTest.kt` and `M3uHelperTest.kt`.
 
 ### 2. Verification Evidence
+
 - **JVM Unit Tests:**
   `.\gradlew.bat :app:testDebugUnitTest` — **`BUILD SUCCESSFUL in 2m 15s`**
   - 13 test suites (53 tests total, including `AppUpdateManagerTest`, `M3uHelperTest`, `PlaybackQueueUnitTest`, `ScheduledOccurrenceCalculatorTest`, `RadioBrowserClientTest`, `SongWikiUnitTest`, `LyricsCandidateScorerTest`, `LrcParserTest`, `BiquadFilterTest`, `MusicFilterUnitTest`), 100% passed.
@@ -239,6 +254,7 @@ the F0 gate evidence is recorded.
   - Output: `app\build\outputs\apk\debug\Audia-v9.1.1-debug.apk` successfully generated.
 
 ### 3. Canonical Next Actions
+
 - Commit changes to `main`.
 - Update `v9.1.1` tag and push to `origin/main` and `origin v9.1.1`.
 - Monitor GitHub Actions release workflow execution.
@@ -246,6 +262,7 @@ the F0 gate evidence is recorded.
 ## Permanent Unified Production Keystore & Universal In-App Update Alignment — 2026-11-17
 
 ### 1. Delivery & Implementation
+
 - **Permanent Production Keystore Generation:**
   - Created persistent `app/keystore/audia-release.jks` (2048-bit RSA, valid for 10,000 days until April 4, 2054).
   - SHA-256 Fingerprint: `0E:C6:AA:F4:B1:32:AC:78:D4:51:30:9D:59:32:B2:2D:2C:66:BA:CB:80:6C:4B:48:A2:A1:64:91:46:FE:63:F4`.
@@ -259,6 +276,7 @@ the F0 gate evidence is recorded.
   - Updated release workflow to sign the release APK using this bundled keystore by default, with optional secret override support.
 
 ### 2. Verification Evidence
+
 - **Debug APK Build & Signature:**
   - Command: `.\gradlew.bat :app:assembleDebug` — **`BUILD SUCCESSFUL in 52s`**
   - `apksigner verify --print-certs app\build\outputs\apk\debug\Audia-v9.1.1-debug.apk`
@@ -271,6 +289,7 @@ the F0 gate evidence is recorded.
   - Signature match confirmed: Local Debug == Local Release == Cloud CI/CD Release (100% Identical).
 
 ### 3. Canonical Next Actions
+
 - Commit keystore and gradle configuration to `main`.
 - Update `v9.1.1` tag and push to `origin/main` and `origin v9.1.1`.
 - Clean install on test device to transition to the permanent production signature.
@@ -278,6 +297,7 @@ the F0 gate evidence is recorded.
 ## CI/CD Workflow Syntax Fix & Release Pipeline Execution — 2026-11-17
 
 ### 1. Delivery & Implementation
+
 - **GitHub Actions Syntax Fix:**
   - Resolved workflow validation failure on run #8 caused by `${{ secrets.* }}` placed directly inside an `if:` condition.
   - Removed the obsolete keystore decoding step since `app/keystore/audia-release.jks` is committed directly to the private repository and picked up automatically by Gradle.
@@ -288,6 +308,7 @@ the F0 gate evidence is recorded.
 ## Brand Identity Restoration & v9.1.2 Production Build — 2026-11-17
 
 ### 1. Delivery & Implementation
+
 - **Audia Logo Restoration on Play/Pause Controls:**
   - Restored the iconic Audia Triple Arch brand vector (`R.drawable.icon`) on the Play/Pause control across:
     - Primary 1-row player controls (`PlayerControls.kt`).
@@ -301,18 +322,21 @@ the F0 gate evidence is recorded.
   - Enables physical in-app update trigger testing from `v9.1.1` to `v9.1.2`.
 
 ### 2. Verification Evidence
+
 - **Kotlin Compilation & JVM Unit Tests:**
   - Command: `.\gradlew.bat :app:compileDebugKotlin :app:testDebugUnitTest` — **`BUILD SUCCESSFUL in 2m 51s`** (all 53 tests passed, 0 errors).
 - **Debug APK Assembly:**
   - Command: `.\gradlew.bat :app:assembleDebug` — **`BUILD SUCCESSFUL in 1m 36s`** (`Audia-v9.1.2-debug.apk` successfully generated).
 
 ### 3. Canonical Next Actions
+
 - Commit all changes cleanly.
 - Create and push release tag `v9.1.2` to trigger CI/CD production release.
 
 ## Legal Documentation, Privacy Policy & Version Date Alignment — 2026-11-17
 
 ### 1. Delivery & Implementation
+
 - **EULA and Privacy Policy Production Draft (`Legals.kt`):**
   - Updated agreement headers to **Audia Player Version 9.1.2**, dated **November 17, 2026**.
   - Documented features: Persistent Playlists with M3U/M3U8 export/import, Android Auto media tree, scheduled playback recovery, synced lyrics via LRCLIB, and community internet radio via Radio Browser.
@@ -325,6 +349,7 @@ the F0 gate evidence is recorded.
   - Synchronized `version.json` on Fastly CDN to `v9.1.2` (code `93`).
 
 ### 2. Verification Evidence
+
 - **Kotlin Compilation:**
   - Command: `.\gradlew.bat :app:compileDebugKotlin` — **`BUILD SUCCESSFUL in 1m 5s`**
 - **Unit Tests:**
