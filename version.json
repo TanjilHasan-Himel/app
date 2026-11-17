@@ -1,8 +1,8 @@
 {
   "versionCode": 93,
   "versionName": "9.1.2",
-  "releaseTitle": "Audia v9.1.2 - Brand Identity Play Controls and Unified Signing",
-  "releaseNotes": "• Restored iconic Audia Triple Arch logo on Play/Pause controls\n• Unified production signing keystore (zero update conflicts)\n• Persistent Playlists and M3U/M3U8 Export/Import\n• Android Auto Media Hierarchy Browsing\n• In-App Automatic Update Checker and 2-Day Gentle Reminders",
+  "releaseTitle": "Audia 9.1.2 — Performance & Experience Update",
+  "releaseNotes": "• Refined player controls and enhanced visual aesthetics\n• Persistent custom playlists with seamless M3U/M3U8 import & export\n• Android Auto integration for safe in-vehicle playback\n• Audio engine performance and overall stability improvements",
   "downloadUrl": "https://github.com/TanjilHasan-Himel/app/releases/latest/download/Audia-latest.apk",
   "releaseUrl": "https://github.com/TanjilHasan-Himel/app/releases/latest"
 }
