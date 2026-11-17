@@ -64,8 +64,9 @@ class SchedulerViewModel @Inject constructor(
         fadeInSeconds: Int
     ) {
         viewModelScope.launch {
+            val firstUri = contentUris.firstOrNull().orEmpty()
             val task = ScheduledTask(
-                songUri = contentUris.first(),
+                songUri = firstUri,
                 songTitle = contentTitle,
                 hour = hour,
                 minute = minute,
@@ -134,8 +135,9 @@ class SchedulerViewModel @Inject constructor(
             alarmScheduler.cancelAlarm(task)
             
             // Create updated task object
+            val firstUri = contentUris.firstOrNull().orEmpty()
             val updatedTask = task.copy(
-                songUri = contentUris.first(),
+                songUri = firstUri,
                 songTitle = contentTitle,
                 hour = hour,
                 minute = minute,

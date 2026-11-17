@@ -18,6 +18,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -263,7 +266,7 @@ fun AlarmDialog(
                              Text(
                                  text = when {
                                      selectedContentSongs.isEmpty() -> "Select ${selectedContentType.lowercase()}..."
-                                     selectedContentType == "TRACK" -> selectedContentSongs.first().title
+                                     selectedContentType == "TRACK" -> selectedContentSongs.firstOrNull()?.title ?: "Select track..."
                                      else -> alarmToEdit?.songTitle?.takeIf {
                                          alarmToEdit.contentType == selectedContentType
                                      } ?: "${selectedContentSongs.size} tracks selected"
@@ -274,7 +277,7 @@ fun AlarmDialog(
                              )
                              if (selectedContentSongs.isNotEmpty()) {
                                  Text(
-                                     text = if (selectedContentType == "TRACK") selectedContentSongs.first().artist
+                                     text = if (selectedContentType == "TRACK") selectedContentSongs.firstOrNull()?.artist.orEmpty()
                                      else "Plays once, then stops",
                                      color = Color.Gray,
                                      fontSize = 12.sp,
@@ -363,10 +366,11 @@ fun AlarmDialog(
                             onClick = {
                                 if (selectedContentSongs.isNotEmpty()) {
                                     val daysString = selectedDays.joinToString(",")
+                                    val firstSong = selectedContentSongs.firstOrNull()
                                     val title = when (selectedContentType) {
-                                        "TRACK" -> selectedContentSongs.first().title
-                                        "ALBUM" -> selectedContentSongs.first().album
-                                        "FOLDER" -> selectedContentSongs.first().bucketDisplayName.ifBlank { "Folder" }
+                                        "TRACK" -> firstSong?.title ?: "Track"
+                                        "ALBUM" -> firstSong?.album.takeUnless { it.isNullOrBlank() } ?: "Album"
+                                        "FOLDER" -> firstSong?.bucketDisplayName?.ifBlank { "Folder" } ?: "Folder"
                                         "PLAYLIST" -> "Playlist (${selectedContentSongs.size})"
                                         else -> "Custom queue (${selectedContentSongs.size})"
                                     }
@@ -713,6 +717,13 @@ private fun WeekDaySelector(
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
+private data class SchedulePickerItem(
+    val uniqueKey: String,
+    val title: String,
+    val subtitle: String,
+    val songs: List<Song>
+)
+
 @Composable
 private fun ScheduleContentPicker(
     songList: List<Song>,
@@ -724,15 +735,58 @@ private fun ScheduleContentPicker(
     var queueSelection by remember(type, initialSelection) {
         mutableStateOf(initialSelection.map(Song::uri).toSet())
     }
-    val groups = remember(type, query, songList) {
+    val items = remember(type, query, songList) {
         val source = if (query.isBlank()) songList else songList.filter {
             it.title.contains(query, true) || it.artist.contains(query, true) ||
                 it.album.contains(query, true) || it.bucketDisplayName.contains(query, true)
         }
         when (type) {
-            "ALBUM" -> source.filter { it.album.isNotBlank() }.groupBy(Song::album).toList()
-            "FOLDER" -> source.groupBy { it.bucketDisplayName.ifBlank { it.folderPath } }.toList()
-            else -> source.take(100).map { it.title to listOf(it) }
+            "ALBUM" -> {
+                source.filter { it.album.isNotBlank() }
+                    .groupBy(Song::album)
+                    .entries
+                    .mapIndexed { index, (albumName, songs) ->
+                        SchedulePickerItem(
+                            uniqueKey = "album_${albumName}_$index",
+                            title = albumName,
+                            subtitle = "${songs.size} tracks • ${songs.firstOrNull()?.artist.orEmpty()}",
+                            songs = songs
+                        )
+                    }
+            }
+            "FOLDER" -> {
+                source.groupBy { it.folderPath.ifBlank { it.bucketDisplayName } }
+                    .entries
+                    .mapIndexed { index, (path, songs) ->
+                        val displayName = songs.firstOrNull()?.bucketDisplayName?.ifBlank { path.substringAfterLast('/') } ?: "Folder"
+                        SchedulePickerItem(
+                            uniqueKey = "folder_${path}_$index",
+                            title = displayName,
+                            subtitle = "${songs.size} tracks • $path",
+                            songs = songs
+                        )
+                    }
+            }
+            "QUEUE", "PLAYLIST" -> {
+                source.mapIndexed { index, song ->
+                    SchedulePickerItem(
+                        uniqueKey = "multi_${song.id}_${song.uri}_$index",
+                        title = song.title.ifBlank { "Unknown Title" },
+                        subtitle = song.artist.ifBlank { "Unknown Artist" },
+                        songs = listOf(song)
+                    )
+                }
+            }
+            else -> { // "TRACK"
+                source.mapIndexed { index, song ->
+                    SchedulePickerItem(
+                        uniqueKey = "track_${song.id}_${song.uri}_$index",
+                        title = song.title.ifBlank { "Unknown Title" },
+                        subtitle = song.artist.ifBlank { "Unknown Artist" },
+                        songs = listOf(song)
+                    )
+                }
+            }
         }
     }
 
@@ -753,60 +807,100 @@ private fun ScheduleContentPicker(
             leadingIcon = { Icon(Icons.Default.Search, "Search", tint = Color.Gray) }
         )
 
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(groups, key = { it.first }) { (name, songs) ->
-                 val isMultiSelect = type == "QUEUE" || type == "PLAYLIST"
-                 val selected = isMultiSelect && songs.first().uri in queueSelection
-                 Row(
-                     modifier = Modifier
-                         .fillMaxWidth()
-                         .clickable {
-                             if (isMultiSelect) {
-                                 val uri = songs.first().uri
-                                 queueSelection = if (selected) queueSelection - uri else queueSelection + uri
-                             } else onSelected(songs)
-                         }
-                         .padding(vertical = 12.dp, horizontal = 4.dp),
-                     verticalAlignment = Alignment.CenterVertically
-                 ) {
-                     // Icon Left
-                     Box(
+        if (items.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (query.isNotBlank()) "No matching ${type.lowercase()} found" else "No audio items available",
+                    color = Color.Gray,
+                    fontSize = 14.sp
+                )
+            }
+        } else {
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(items, key = { it.uniqueKey }) { item ->
+                    val isMultiSelect = type == "QUEUE" || type == "PLAYLIST"
+                    val itemUri = item.songs.firstOrNull()?.uri
+                    val selected = isMultiSelect && itemUri != null && itemUri in queueSelection
+                    Row(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.White.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
-                     ) {
-                         Icon(Icons.Default.MusicNote, null, tint = SoftGold)
-                     }
-                     
-                     Spacer(modifier = Modifier.width(12.dp))
-                     
-                     Column(modifier = Modifier.weight(1f)) {
-                         Text(name.ifBlank { "Unknown" }, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                         Text(
-                             if (songs.size == 1) songs.first().artist else "${songs.size} tracks",
-                             color = Color.Gray,
-                             fontSize = 12.sp,
-                             maxLines = 1
-                         )
-                     }
-                     if (isMultiSelect) Checkbox(
-                         checked = selected,
-                         onCheckedChange = null,
-                         colors = CheckboxDefaults.colors(checkedColor = SoftGold)
-                     )
-                 }
-                 HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+                            .fillMaxWidth()
+                            .clickable {
+                                if (isMultiSelect) {
+                                    if (itemUri != null) {
+                                        queueSelection = if (selected) queueSelection - itemUri else queueSelection + itemUri
+                                    }
+                                } else if (item.songs.isNotEmpty()) {
+                                    onSelected(item.songs)
+                                }
+                            }
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Icon Left
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = when (type) {
+                                    "FOLDER" -> Icons.Default.Folder
+                                    "QUEUE", "PLAYLIST" -> Icons.Default.QueueMusic
+                                    else -> Icons.Default.MusicNote
+                                },
+                                contentDescription = null,
+                                tint = SoftGold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = item.title,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = item.subtitle,
+                                color = Color.Gray,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (isMultiSelect) {
+                            Checkbox(
+                                checked = selected,
+                                onCheckedChange = null,
+                                colors = CheckboxDefaults.colors(checkedColor = SoftGold)
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+                }
             }
         }
-        if (type == "QUEUE" || type == "PLAYLIST") Button(
-            onClick = { onSelected(songList.filter { it.uri in queueSelection }) },
-            enabled = queueSelection.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = SoftGold)
-        ) {
-            Text("Use ${queueSelection.size} selected tracks", color = Color.Black)
+
+        if (type == "QUEUE" || type == "PLAYLIST") {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { onSelected(songList.filter { it.uri in queueSelection }) },
+                enabled = queueSelection.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = SoftGold)
+            ) {
+                Text("Use ${queueSelection.size} selected tracks", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }

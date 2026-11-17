@@ -443,3 +443,38 @@ the F0 gate evidence is recorded.
 
 - Commit changes cleanly.
 - Report findings and reassurance to user in Bengali.
+
+## Schedule Content Picker Duplicate-Key Crash Fix & Safety Hardening — 2026-11-18
+
+### 1. Root Cause Diagnosis
+
+- **Physical Device Library Evidence:**
+  - Querying the connected physical Samsung Galaxy M31 (`SM-M315F`) media library revealed multiple songs sharing identical titles (e.g. Row 17 and Row 18 both titled `"Aurora - Samsung Ringtone"`, duplicate recordings titled `"Voice 001"`, and repeated tracks titled `"Du Haatey Mutho Bhorey"`, `"Rangeen"`).
+  - In `AlarmDialog.kt`, `ScheduleContentPicker` populated track items with `source.take(100).map { it.title to listOf(it) }` and rendered them via `items(groups, key = { it.first })`.
+  - Because `it.first` was the raw track title, Jetpack Compose encountered duplicate keys in `LazyLayoutKeyIndexMap`, triggering an immediate fatal crash:
+    `java.lang.IllegalArgumentException: Key 'Aurora - Samsung Ringtone' was already used. If you are using LazyColumn/Row the keys should be unique!`
+  - Additionally, `songs.first()` and `contentUris.first()` calls in `AlarmDialog.kt` and `SchedulerViewModel.kt` lacked null-safety guards, causing `NoSuchElementException` when collections were empty.
+
+### 2. Delivery & Implementation
+
+- **Guaranteed Unique Keys in `ScheduleContentPicker` (`AlarmDialog.kt`):**
+  - Created `SchedulePickerItem` model encapsulating `uniqueKey`, `title`, `subtitle`, and `songs`.
+  - For individual tracks: keyed by `track_${song.id}_${song.uri}_$index`, guaranteeing 100% unique keys regardless of duplicate song titles or artist names. Removed artificial 100-item cutoff.
+  - For albums: keyed by `album_${albumName}_$index` using `groupBy(Song::album)`.
+  - For folders: keyed by `folder_${path}_$index` using `folderPath` grouping so similarly named folders on internal vs SD storage never collide.
+  - For custom queue/playlist multi-selection: keyed by `multi_${song.id}_${song.uri}_$index`.
+- **Collection Null Safety Hardening (`AlarmDialog.kt`, `SchedulerViewModel.kt`):**
+  - Replaced risky `first()` calls with `firstOrNull()` and safe fallback strings (`contentUris.firstOrNull().orEmpty()`, `selectedContentSongs.firstOrNull()?.title`).
+  - Added empty state indicator in `ScheduleContentPicker` when no matching audio files are found.
+  - Updated `SchedulerScreen.kt` to supply `key = { it.id }` in `items(tasks)` for stable Compose item identity.
+
+### 3. Verification Evidence
+
+- **Kotlin Compilation & JVM Unit Tests:**
+  - Command: `.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug`
+  - Result: **`BUILD SUCCESSFUL in 4m 5s`** (53 actionable tasks, 53 unit tests passed, 0 failures, debug APK built).
+
+### 4. Canonical Next Actions
+
+- Commit changes cleanly.
+- Explain root cause and fix clearly to user in Bengali.
