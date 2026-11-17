@@ -356,12 +356,14 @@ the F0 gate evidence is recorded.
   - Command: `.\gradlew.bat :app:testDebugUnitTest` — **`BUILD SUCCESSFUL in 47s`** (all 53 tests passed).
 
 ### 3. Canonical Next Actions
+
 - Commit legal and version documentation updates.
 - Retag `v9.1.2` and push to remote.
 
 ## Professional User-Facing Copy & Notification Polish — 2026-11-17
 
 ### 1. Delivery & Implementation
+
 - **Professional User-Facing Copy Invariant Enshrined:**
   - Added strict repository-wide rules in `AGENTS.md` and `GEMINI.md`: All user-facing release notes, update dialogs, push/system notifications, and toasts MUST use professional, polished, consumer-grade language. Internal developer jargon, raw commit messages, keystore/signature details, and testing notes are strictly forbidden from user-facing surfaces.
 - **Fastly CDN / Public `version.json` Copy Polish:**
@@ -373,23 +375,37 @@ the F0 gate evidence is recorded.
   - Standardized time-of-day listening messages and welcome notification to calm, audiophile-grade tone ("Experience pure, uncompressed offline sound.").
 
 ### 2. Verification Evidence
+
 - **Kotlin Compilation, Unit Tests & Debug Assembly:**
   - Command: `.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug` — **`BUILD SUCCESSFUL in 1m 43s`** (all 53 unit tests passed, 0 failures, debug APK generated).
 - **Public Fastly CDN Verification:**
   - `version.json` validated on `https://raw.githubusercontent.com/TanjilHasan-Himel/app/main/version.json` returning professional consumer-grade copy.
 
 ### 3. Canonical Next Actions
+
 - Commit changes cleanly.
 - Push to `origin main` and update tag `v9.1.2`.
 
+## Onboarding Adaptive Layout & Permission Card Text Bug Fix — 2026-11-17
 
+### 1. Delivery & Implementation
 
+- **Fixed Vertical "R-E-Q-U-I-R-E-D" Wrapping Bug:**
+  - In `PermissionCard` (`OnboardingScreen.kt`), `Text(title)` previously squeezed `Text("Required")` into a narrow ~10dp column, forcing Compose to wrap `"Required"` character-by-character into 8 vertical lines (`R\ne\nq\nu\ni\nr\ne\nd`), which grossly inflated card heights.
+  - Converted `"REQUIRED"` into a horizontal pill badge with `softWrap = false`, bound `Text(title)` to `Modifier.weight(1f, fill = false)`, and hid the badge once permission is granted (`!isGranted`).
+- **Eliminated Description Text Truncation:**
+  - Expanded `Text(description)` from `maxLines = 1` to `maxLines = 2` with explicit `lineHeight = 14.sp`, preventing sentence clipping ("Required to scan an...", "Lock-screen & back...").
+- **Adaptive Screen Ratio & Viewport Scrolling:**
+  - Wrapped `PermissionsStep` inside `Modifier.verticalScroll(rememberScrollState())` with `statusBarsPadding()` and `navigationBarsPadding()`.
+  - Ensures the bottom CTA ("Grant Music Access" / "Start Using Audia") is never pushed off-screen or rendered inaccessible on shorter phones, tablets, or high-DPI/large font accessibility displays.
 
+### 2. Verification Evidence
 
+- **Kotlin Compilation:**
+  - Command: `.\gradlew.bat :app:compileDebugKotlin` — **`BUILD SUCCESSFUL in 36s`**
+- **JVM Unit Tests:**
+  - Command: `.\gradlew.bat :app:testDebugUnitTest` — **`BUILD SUCCESSFUL in 34s`** (all 53 tests passed).
 
+### 3. Canonical Next Actions
 
-
-
-
-
-
+- Commit changes cleanly and push to repository.

@@ -18,9 +18,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -106,7 +110,8 @@ fun OnboardingScreen(
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 36.dp, start = 24.dp, end = 24.dp)
+                    .navigationBarsPadding()
+                    .padding(bottom = 28.dp, start = 24.dp, end = 24.dp)
                     .fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -289,13 +294,17 @@ private fun PermissionsStep(
         refreshPermissions()
     }
 
+    val scrollState = rememberScrollState()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
-            .padding(top = 48.dp, bottom = 36.dp),
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .verticalScroll(scrollState)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // Top Header
         Column(
@@ -306,35 +315,37 @@ private fun PermissionsStep(
                 painter = painterResource(id = R.drawable.audia_player_logo),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(68.dp)
+                    .size(56.dp)
                     .clip(CircleShape)
-                    .border(2.dp, SoftGold.copy(alpha = 0.4f), CircleShape)
+                    .border(1.5.dp, SoftGold.copy(alpha = 0.4f), CircleShape)
             )
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = if (musicGranted) "You're All Set!" else "Permissions & Setup",
                 fontFamily = OutfitFontFamily,
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = if (musicGranted)
                     "Audio access is granted. Optional permissions can be configured below or anytime in Settings."
                     else "Audia Player needs access to your local audio tracks to play music.",
                 fontFamily = OutfitFontFamily,
-                fontSize = 13.sp,
+                fontSize = 12.5.sp,
                 color = Color.White.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                lineHeight = 16.sp,
+                modifier = Modifier.padding(horizontal = 12.dp)
             )
         }
 
         // Permission Items List
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             PermissionCard(
                 icon = Icons.Default.MusicNote,
@@ -385,6 +396,8 @@ private fun PermissionsStep(
             )
         }
 
+        Spacer(modifier = Modifier.height(4.dp))
+
         // Bottom CTA
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -405,18 +418,18 @@ private fun PermissionsStep(
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .height(48.dp)
             ) {
                 Text(
                     text = if (musicGranted) "Start Using Audia" else "Grant Music Access",
                     color = Color.Black,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     fontFamily = OutfitFontFamily
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
@@ -455,84 +468,104 @@ private fun PermissionCard(
         colors = CardDefaults.cardColors(
             containerColor = if (isGranted) Color(0x331E293B) else Color(0x40161822)
         ),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (isGranted) Color(0xFF4CAF50).copy(alpha = 0.35f) else Color.White.copy(alpha = 0.12f)
+            if (isGranted) Color(0xFF4CAF50).copy(alpha = 0.35f) else Color.White.copy(alpha = 0.10f)
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (isGranted) Color(0x224CAF50) else Color(0x22FFFFFF)),
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(if (isGranted) Color(0x224CAF50) else Color(0x1AFFFFFF)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = if (isGranted) Color(0xFF4CAF50) else SoftGold,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
                         text = title,
                         fontFamily = OutfitFontFamily,
-                        fontSize = 14.sp,
+                        fontSize = 13.5.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
-                    if (isRequired) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Required",
-                            fontFamily = OutfitFontFamily,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SoftGold
-                        )
+                    if (isRequired && !isGranted) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(SoftGold.copy(alpha = 0.18f))
+                                .border(0.5.dp, SoftGold.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                        ) {
+                            Text(
+                                text = "REQUIRED",
+                                fontFamily = OutfitFontFamily,
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = SoftGold,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = description,
                     fontFamily = OutfitFontFamily,
                     fontSize = 11.sp,
                     color = Color.White.copy(alpha = 0.65f),
-                    maxLines = 1,
+                    maxLines = 2,
+                    lineHeight = 14.sp,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
             if (isGranted) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
+                        .clip(RoundedCornerShape(16.dp))
                         .background(Color(0x2E4CAF50))
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = null,
                         tint = Color(0xFF4CAF50),
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(12.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = "Enabled",
                         fontFamily = OutfitFontFamily,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF4CAF50)
+                        color = Color(0xFF4CAF50),
+                        softWrap = false
                     )
                 }
             } else {
@@ -542,15 +575,16 @@ private fun PermissionCard(
                         containerColor = if (isRequired) SoftGold else Color.White.copy(alpha = 0.15f),
                         contentColor = if (isRequired) Color.Black else Color.White
                     ),
-                    shape = RoundedCornerShape(20.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    modifier = Modifier.height(30.dp)
+                    shape = RoundedCornerShape(16.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                    modifier = Modifier.height(28.dp)
                 ) {
                     Text(
                         text = if (isRequired) "Grant" else "Allow",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        fontFamily = OutfitFontFamily
+                        fontFamily = OutfitFontFamily,
+                        softWrap = false
                     )
                 }
             }
