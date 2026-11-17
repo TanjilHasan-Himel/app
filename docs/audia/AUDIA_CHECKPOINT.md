@@ -285,6 +285,34 @@ the F0 gate evidence is recorded.
   - Pushed fix in commit `d8e7a45` and updated `v9.1.1` tag (`ae1a5df`).
   - Active GitHub Actions workflow run `44021531934` (Run #9) accepted and executing tests & release build.
 
+## Brand Identity Restoration & v9.1.2 Production Build — 2026-11-17
+
+### 1. Delivery & Implementation
+- **Audia Logo Restoration on Play/Pause Controls:**
+  - Restored the iconic Audia Triple Arch brand vector (`R.drawable.icon`) on the Play/Pause control across:
+    - Primary 1-row player controls (`PlayerControls.kt`).
+    - Arch morphing player button (`PlayerScreen.kt`).
+    - Leaf composable `AudiaPlayPause` (`PlayerScreen.kt`).
+    - Zen Mode player controls (`PlayerScreen.kt`).
+    - Radio MiniPlayer control (`RadioMiniPlayer.kt`).
+  - Brand identity preserved: when music is idle/paused, the Audia Arch logo serves as the hero play control with dynamic theme/accent color tinting.
+- **Version Bump for Live Update Verification:**
+  - Bumped version in `app/version.properties` to `VERSION_NAME=9.1.2`, `VERSION_CODE=93`.
+  - Enables physical in-app update trigger testing from `v9.1.1` to `v9.1.2`.
+
+### 2. Verification Evidence
+- **Kotlin Compilation & JVM Unit Tests:**
+  - Command: `.\gradlew.bat :app:compileDebugKotlin :app:testDebugUnitTest` — **`BUILD SUCCESSFUL in 2m 51s`** (all 53 tests passed, 0 errors).
+- **Debug APK Assembly:**
+  - Command: `.\gradlew.bat :app:assembleDebug` — **`BUILD SUCCESSFUL in 1m 36s`** (`Audia-v9.1.2-debug.apk` successfully generated).
+
+### 3. Canonical Next Actions
+- Verify assembleDebug completion.
+- Commit all changes cleanly.
+- Create and push release tag `v9.1.2` to trigger CI/CD production release.
+
+
+
 
 
 

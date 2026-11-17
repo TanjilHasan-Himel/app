@@ -26,8 +26,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
+import com.eplaytime.app.R
 
 /**
  * Modern Clean Primary Player Controls (The Sacred 1 Row)
@@ -134,12 +136,21 @@ fun PlayerControls(
                 },
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                contentDescription = if (isPlaying) "Pause" else "Play",
-                tint = Color(0xFF0F0F10), // Maximum contrast on bright accent!
-                modifier = Modifier.size(34.dp)
-            )
+            if (isPlaying) {
+                Icon(
+                    imageVector = Icons.Default.Pause,
+                    contentDescription = "Pause",
+                    tint = Color(0xFF0F0F10), // Maximum contrast on bright accent!
+                    modifier = Modifier.size(34.dp)
+                )
+            } else {
+                Icon(
+                    painter = painterResource(id = R.drawable.icon),
+                    contentDescription = "Play",
+                    tint = Color(0xFF0F0F10),
+                    modifier = Modifier.size(34.dp)
+                )
+            }
         }
 
         // 4. Next Track

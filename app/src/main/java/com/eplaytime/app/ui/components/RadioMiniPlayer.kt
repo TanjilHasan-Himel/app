@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,11 +60,20 @@ fun RadioMiniPlayer(
             Text(nowPlaying ?: "LIVE • ${station.codec}", fontFamily = OutfitFontFamily, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onClick = onPlayPause, modifier = Modifier.size(48.dp)) {
-            Icon(
-                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                contentDescription = if (isPlaying) "Pause radio" else "Play radio",
-                tint = SoftGold
-            )
+            if (isPlaying) {
+                Icon(
+                    Icons.Default.Pause,
+                    contentDescription = "Pause radio",
+                    tint = SoftGold
+                )
+            } else {
+                Icon(
+                    painter = painterResource(id = R.drawable.icon),
+                    contentDescription = "Play radio",
+                    tint = SoftGold,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
         }
     }
 }

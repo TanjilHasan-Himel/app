@@ -1509,7 +1509,7 @@ fun PlayerScreen(
                                 )
                             } else {
                                 Icon(
-                                    imageVector = Icons.Default.PlayArrow,
+                                    painter = painterResource(id = R.drawable.icon),
                                     contentDescription = "Play",
                                     tint = Color.White,
                                     modifier = Modifier.size(36.dp)
@@ -2184,12 +2184,21 @@ private fun AudiaPlayPause(
             },
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-            contentDescription = if (isPlaying) "Pause" else "Play",
-            tint = iconTint,
-            modifier = Modifier.size(34.dp)
-        )
+        if (isPlaying) {
+            Icon(
+                imageVector = Icons.Default.Pause,
+                contentDescription = "Pause",
+                tint = iconTint,
+                modifier = Modifier.size(34.dp)
+            )
+        } else {
+            Icon(
+                painter = painterResource(id = R.drawable.icon),
+                contentDescription = "Play",
+                tint = iconTint,
+                modifier = Modifier.size(34.dp)
+            )
+        }
     }
 }
 
@@ -2726,12 +2735,21 @@ fun ZenModeView(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = "Play/Pause",
-                        tint = zenIconTint,
-                        modifier = Modifier.size(34.dp)
-                    )
+                    if (isPlaying) {
+                        Icon(
+                            imageVector = Icons.Default.Pause,
+                            contentDescription = "Pause",
+                            tint = zenIconTint,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(id = R.drawable.icon),
+                            contentDescription = "Play",
+                            tint = zenIconTint,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
                 }
 
                 BounceIconButton(
