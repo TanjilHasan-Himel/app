@@ -835,9 +835,17 @@ class MusicViewModel @Inject constructor(
                 } else {
                     stopProgressUpdates()
                     // EAGER SAVE: Save state immediately on Pause (Notification/Earbuds)
-                    viewModelScope.launch {
-                        _currentSong.value?.let { song ->
-                            dataStore.savePlaybackState(song.uri, mediaController?.currentPosition ?: 0L, _playbackSpeed.value, _shuffleEnabled.value, _repeatMode.value)
+                    val currentPos = mediaController?.currentPosition ?: 0L
+                    val song = _currentSong.value
+                    if (song != null) {
+                        viewModelScope.launch {
+                            dataStore.savePlaybackState(
+                                song.uri,
+                                currentPos,
+                                _playbackSpeed.value,
+                                _shuffleEnabled.value,
+                                _repeatMode.value
+                            )
                         }
                     }
                 }
@@ -846,11 +854,19 @@ class MusicViewModel @Inject constructor(
             override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
                  // EAGER SAVE & PROGRESS SYNC: Save state and sync progress on Seek/Skip from Notification or Lockscreen
                  _progress.value = newPosition.positionMs
-                 viewModelScope.launch {
-                    _currentSong.value?.let { song ->
-                        dataStore.savePlaybackState(song.uri, newPosition.positionMs, _playbackSpeed.value, _shuffleEnabled.value, _repeatMode.value)
-                    }
-                }
+                 val song = _currentSong.value
+                 val newPos = newPosition.positionMs
+                 if (song != null) {
+                     viewModelScope.launch {
+                         dataStore.savePlaybackState(
+                             song.uri,
+                             newPos,
+                             _playbackSpeed.value,
+                             _shuffleEnabled.value,
+                             _repeatMode.value
+                         )
+                     }
+                 }
             }
 
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {

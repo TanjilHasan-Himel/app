@@ -169,7 +169,16 @@ class MusicService : MediaLibraryService() {
                         .setOngoing(true)
                         .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Alarm", stopPendingIntent)
                         .build()
-                    startForeground(NOTIFICATION_ID_ALARM, notification)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        androidx.core.app.ServiceCompat.startForeground(
+                            this,
+                            NOTIFICATION_ID_ALARM,
+                            notification,
+                            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                        )
+                    } else {
+                        startForeground(NOTIFICATION_ID_ALARM, notification)
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to startForeground", e)
                 }
@@ -206,7 +215,7 @@ class MusicService : MediaLibraryService() {
 
                     // 3. Launch a smooth fade-in coroutine gracefully turning it up over 10 seconds
                     fadeCoroutine?.cancel()
-                    fadeCoroutine = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                    fadeCoroutine = serviceScope.launch {
                         val fadeDuration = intent.getIntExtra(EXTRA_ALARM_FADE_SECONDS, 10)
                             .coerceIn(0, 120) * 1_000L
                         val fadeInterval = 100L    // update every 100ms
@@ -218,11 +227,12 @@ class MusicService : MediaLibraryService() {
 
                         for (i in 1..steps) {
                             kotlinx.coroutines.delay(fadeInterval)
-                            if (player == null || player?.playWhenReady == false) break
-                            exo.volume = (exo.volume + volumeStep).coerceAtMost(targetInternalVolume)
+                            val activePlayer = player ?: break
+                            if (!activePlayer.playWhenReady) break
+                            activePlayer.volume = (activePlayer.volume + volumeStep).coerceAtMost(targetInternalVolume)
                         }
                         
-                        exo.volume = targetInternalVolume
+                        player?.volume = targetInternalVolume
                         Log.d(TAG, "Fade-in playback complete and reached max level")
                     }
 
@@ -231,8 +241,10 @@ class MusicService : MediaLibraryService() {
                     if (stopAfterMinutes > 0) {
                         scheduledStopJob = serviceScope.launch {
                             delay(stopAfterMinutes.coerceAtMost(24 * 60) * 60_000L)
-                            exo.stop()
-                            exo.clearMediaItems()
+                            player?.let { p ->
+                                p.stop()
+                                p.clearMediaItems()
+                            }
                             finishScheduledSession("COMPLETED")
                             stopForeground(STOP_FOREGROUND_REMOVE)
                             stopSelf()
@@ -797,16 +809,18 @@ class MusicService : MediaLibraryService() {
         }
 
         // Intent to open app when clicking notification
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+            ?: Intent(this, com.eplaytime.app.MainActivity::class.java)
         val pendingIntent = android.app.PendingIntent.getActivity(
             this,
             0,
-            packageManager.getLaunchIntentForPackage(packageName),
+            launchIntent,
             android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         mediaSession = MediaLibrarySession.Builder(this, player!!, sessionCallback)
             .setId("MusicService")
-            .setSessionActivity(pendingIntent!!)
+            .setSessionActivity(pendingIntent)
             .build()
 
         // Ensure Notification Channel for Media Playback has VISIBILITY_PUBLIC for Android 11/12 Lock Screen

@@ -409,3 +409,37 @@ the F0 gate evidence is recorded.
 ### 3. Canonical Next Actions
 
 - Commit changes cleanly and push to repository.
+
+## Scheduled Playback Thread-Safety & Foreground Service Type Hardening — 2026-11-17
+
+### 1. Root Cause Diagnosis from Physical Device Dropbox Telemetry
+
+- **Physical Device Telemetry (`SM-M315F`):**
+  - Historical crash logs from system `dumpsys dropbox` revealed crash reports at `04:00:00` and `08:45:00` on earlier release `v9.1.0 (91)`:
+    `java.lang.IllegalStateException: Player is accessed on the wrong thread. Current thread: 'DefaultDispatcher-worker-2', Expected thread: 'main'`
+  - Root cause was traced to ExoPlayer / Media3 calls (`player` and `mediaController`) accessed inside background coroutines (`Dispatchers.IO`) during scheduled alarm triggers and seek/pause persistence updates.
+  - In addition, calling raw `startForeground(NOTIFICATION_ID_ALARM, notification)` without foreground service type triggers `MissingForegroundServiceTypeException` or FGS timeout kills on Android 12+/14+ (`targetSdkVersion = 36`).
+
+### 2. Delivery & Implementation
+
+- **ExoPlayer & MediaController Thread Safety Enforced:**
+  - In `MusicViewModel.kt`, captured `mediaController?.currentPosition` and `newPosition.positionMs` synchronously on the Main thread before dispatching to `dataStore.savePlaybackState` background coroutines.
+  - In `MusicService.kt`, bound volume fade coroutine (`fadeCoroutine`) and automatic timeout stop (`scheduledStopJob`) strictly to `serviceScope` (running on `Dispatchers.Main.immediate`), preventing untracked thread leaks. Added null and `playWhenReady` safety checks across volume interpolation steps.
+- **Android Q+ Foreground Service Type Integration:**
+  - Updated `MusicService.startForeground` to use `androidx.core.app.ServiceCompat.startForeground` passing `ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK` on API 29+ (Q and above). Eliminates FGS start timeouts and Android 14+ enforcement crashes.
+- **Notification PendingIntent Null Safety:**
+  - Added safe fallback intent `Intent(this, MainActivity::class.java)` in `MusicService.kt` when `packageManager.getLaunchIntentForPackage(packageName)` returns null, preventing potential runtime NPE.
+
+### 3. Verification Evidence
+
+- **Kotlin Compilation & JVM Unit Tests:**
+  - Command: `.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug`
+  - Result: **`BUILD SUCCESSFUL in 1m 39s`** (53 actionable tasks, all 53 unit tests passed, 0 failures, debug APK built cleanly).
+- **Physical Device State Verification:**
+  - Verified package `com.eplaytime.app` on `SM-M315F` has `SCHEDULE_EXACT_ALARM: granted=true`.
+  - Zero crashes recorded on physical device for `com.eplaytime.app` on November 17, 2026.
+
+### 4. Canonical Next Actions
+
+- Commit changes cleanly.
+- Report findings and reassurance to user in Bengali.
