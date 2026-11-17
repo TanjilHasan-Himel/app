@@ -334,6 +334,30 @@ the F0 gate evidence is recorded.
 - Commit legal and version documentation updates.
 - Retag `v9.1.2` and push to remote.
 
+## Professional User-Facing Copy & Notification Polish — 2026-11-17
+
+### 1. Delivery & Implementation
+- **Professional User-Facing Copy Invariant Enshrined:**
+  - Added strict repository-wide rules in `AGENTS.md` and `GEMINI.md`: All user-facing release notes, update dialogs, push/system notifications, and toasts MUST use professional, polished, consumer-grade language. Internal developer jargon, raw commit messages, keystore/signature details, and testing notes are strictly forbidden from user-facing surfaces.
+- **Fastly CDN / Public `version.json` Copy Polish:**
+  - Replaced developer notes with consumer-grade release notes highlighting refined playback controls, persistent M3U playlists, Android Auto integration, and audio engine stability.
+- **In-App Update Dialog Polish (`UpdateAvailableDialog.kt`):**
+  - Updated title to concise "Update Available", section to "What's New", professional fallback notes, and "Remind Me Later" action.
+- **Engagement & Notification Cleanliness (`EngagementWorker.kt`, `MainActivity.kt`):**
+  - Stripped all mojibake/corrupted characters from notification strings.
+  - Standardized time-of-day listening messages and welcome notification to calm, audiophile-grade tone ("Experience pure, uncompressed offline sound.").
+
+### 2. Verification Evidence
+- **Kotlin Compilation, Unit Tests & Debug Assembly:**
+  - Command: `.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug` — **`BUILD SUCCESSFUL in 1m 43s`** (all 53 unit tests passed, 0 failures, debug APK generated).
+- **Public Fastly CDN Verification:**
+  - `version.json` validated on `https://raw.githubusercontent.com/TanjilHasan-Himel/app/main/version.json` returning professional consumer-grade copy.
+
+### 3. Canonical Next Actions
+- Commit changes cleanly.
+- Push to `origin main` and update tag `v9.1.2`.
+
+
 
 
 

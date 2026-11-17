@@ -70,7 +70,7 @@ fun UpdateAvailableDialog(
 
                 // Title
                 Text(
-                    text = "New Update Available!",
+                    text = "Update Available",
                     fontFamily = OutfitFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp,
@@ -118,7 +118,7 @@ fun UpdateAvailableDialog(
 
                 // What's New Section
                 Text(
-                    text = "What's New in this Version:",
+                    text = "What's New",
                     fontFamily = OutfitFontFamily,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
@@ -129,7 +129,7 @@ fun UpdateAvailableDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val releaseNotes = updateInfo.releaseNotes.ifBlank {
-                    "• Performance improvements\n• Bug fixes and stability enhancements\n• Android Auto and Playlist updates"
+                    "• Audio engine performance and playback stability\n• Interface refinements and visual polish\n• Playlist management and car audio enhancements"
                 }
 
                 Box(
@@ -188,7 +188,7 @@ fun UpdateAvailableDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Remind Me Later (in 2 days)",
+                        text = "Remind Me Later",
                         fontFamily = OutfitFontFamily,
                         fontWeight = FontWeight.Medium,
                         fontSize = 13.sp,

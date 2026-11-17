@@ -125,8 +125,8 @@ fun sendWelcomeNotification(context: android.content.Context) {
     }
     val notification = androidx.core.app.NotificationCompat.Builder(context, "playtime_welcome")
         .setSmallIcon(com.eplaytime.app.R.drawable.ic_audia_notification)
-        .setContentTitle("Welcome to Audia Player!")
-        .setContentText("Your music sounds better with us.")
+        .setContentTitle("Welcome to Audia")
+        .setContentText("Experience pure, uncompressed offline sound.")
         .setAutoCancel(true)
         .build()
     nm.notify(1001, notification)

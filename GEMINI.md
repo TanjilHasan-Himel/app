@@ -7,3 +7,4 @@ Refer to `AGENTS.md` and `docs/audia/AUDIA_EXECUTION_ROADMAP.md` for full projec
 2. **Roadmap Precedence:** `docs/audia/AUDIA_EXECUTION_ROADMAP.md` is the canonical engineering order. Continue only the first unverified gate unless explicitly redirected.
 3. **Debug First:** Develop and verify using `.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug`. Never deploy or push release tags without full debug verification.
 4. **Git Safety:** Treat worktree as shared and dirty. Check `git status --short` before and after work. Never overwrite unrelated changes. Push to remote only upon explicit user request.
+5. **Professional User-Facing Copy:** All release notes, update dialogs, push/system notifications, and toasts MUST use professional, polished, consumer-grade language. Never expose internal developer jargon, commit messages, debug markers, keystore details, or technical testing notes to end users.

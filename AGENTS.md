@@ -12,6 +12,10 @@
   when they were not executed.
 - Preserve Audia's invariants: integrated artwork-first Player, reliable Scheduled Playback,
   per-song named A-B loops, real radio, local-first data, accessible controls, and reduced motion.
+- Professional User-Facing Copy: All user-facing release notes, in-app update dialogs, push/system
+  notifications, and toasts MUST use professional, polished, consumer-grade language. Never expose
+  internal developer jargon, commit messages, debug markers, keystore details, or technical testing
+  notes to end users.
 - Database changes require explicit migrations and migration tests. Playback/service work requires
   queue, lifecycle, focus/route, notification, and process-death regression. Public services and
   network changes require controller-trust and input-boundary review.

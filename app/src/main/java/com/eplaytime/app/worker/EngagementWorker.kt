@@ -67,14 +67,13 @@ class EngagementWorker @AssistedInject constructor(
         val showResumeSong = isResumeReminder
 
         val message = if (showResumeSong) {
-            "Want to finish listening to $lastSongTitle?"
+            "Continue listening to $lastSongTitle?"
         } else {
             when (hourOfDay) {
-                in 7..11 -> "Good morning, $userName! Start your day with some great vibes. Ã°Å¸Å’â€¦"
-                in 12..15 -> "Good afternoon! Time for a midday music break, $userName. Ã¢Ëœâ‚¬Ã¯Â¸Â"
-                in 16..18 -> "Evening is approaching! Unwind with your favorite tracks. Ã°Å¸Å’â€ "
-                in 19..23 -> "Good night, $userName. Relax with some soothing tunes. Ã°Å¸Å’â„¢"
-                else -> "Night owl, $userName? We've got the perfect late-night beats for you. Ã°Å¸Â¦â€°"
+                in 6..11 -> "Good morning, $userName. Start your day with great sound."
+                in 12..16 -> "Good afternoon, $userName. Take a break with your favorite tracks."
+                in 17..21 -> "Good evening, $userName. Unwind with your music library."
+                else -> "Late night hours. Relax with your favorite tunes, $userName."
             }
         }
 
