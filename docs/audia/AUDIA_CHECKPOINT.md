@@ -476,5 +476,33 @@ the F0 gate evidence is recorded.
 
 ### 4. Canonical Next Actions
 
-- Commit changes cleanly.
-- Explain root cause and fix clearly to user in Bengali.
+- Proceed with official v9.1.3 release build and verification.
+
+## Production Release Build v9.1.3 (Code 94) & CI/CD Hardening — 2026-11-18
+
+### 1. Delivery & Implementation
+
+- **Version Bump to v9.1.3 (`versionCode = 94`):**
+  - Updated `app/version.properties` to `VERSION_CODE=94` and `VERSION_NAME=9.1.3`.
+  - Updated `AboutScreen.kt` fallback `versionName` to `"9.1.3"` and release date to `"November 18, 2026"`.
+  - Updated legal headers in `Legals.kt` (EULA and Privacy Policy) to `Audia Player | Version 9.1.3`, dated `November 18, 2026`.
+- **Packaging & Hardening Summary Included:**
+  - Resolved Onboarding permissions UI letter-by-letter vertical text wrap on "REQUIRED" badge and restored 2-line descriptions with adaptive scrolling across any device screen ratio.
+  - Resolved ExoPlayer/Media3 foreground service thread-safety (`ServiceCompat.startForeground` with `FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK`).
+  - Resolved `ScheduleContentPicker` Compose duplicate-key crash on devices with duplicate song titles.
+
+### 2. Verification Evidence
+
+- **Full Debug & Release Unit Test Verification:**
+  - Command: `.\gradlew.bat :app:testDebugUnitTest :app:assembleRelease`
+  - Result: **`BUILD SUCCESSFUL in 15m 25s`** (92 actionable tasks, all 53 JVM tests passed, 0 failures).
+- **Production APK Generation & Signature Verification:**
+  - Artifact generated: `app/build/outputs/apk/release/Audia-v9.1.3.apk` (Size: 4.74 MB).
+  - Command: `apksigner.bat verify --verbose "app\build\outputs\apk\release\Audia-v9.1.3.apk"`
+  - Verification: `Verified using v2 scheme (APK Signature Scheme v2): true`, Signers: 1 (Production Keystore `app/keystore/audia-release.jks`).
+
+### 3. Canonical Next Actions
+
+- Install release APK to connected physical test device (`SM-M315F`).
+- Push commit and tag `v9.1.3` to GitHub upon user confirmation.
+

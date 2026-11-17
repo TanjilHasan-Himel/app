@@ -1,15 +1,15 @@
 package com.eplaytime.app.util
 
 /**
- * Audia Player legal text — official production draft, 2026-11-17.
+ * Audia Player legal text — official production draft, 2026-11-18.
  */
 object Legals {
 
     const val EULA = """
 END USER LICENSE AGREEMENT AND TERMS OF USE
-Audia Player | Version 9.1.2
+Audia Player | Version 9.1.3
 Developer: Tanjil Hasan Himel
-Last Updated: November 17, 2026
+Last Updated: November 18, 2026
 Contact: taanjilhasan@gmail.com
 GitHub: https://github.com/TanjilHasan-Himel
 
@@ -69,9 +69,9 @@ GitHub: https://github.com/TanjilHasan-Himel
 
     const val PRIVACY_POLICY = """
 PRIVACY POLICY
-Audia Player | Version 9.1.2
+Audia Player | Version 9.1.3
 Developer: Tanjil Hasan Himel
-Last Updated: November 17, 2026
+Last Updated: November 18, 2026
 Privacy Contact: taanjilhasan@gmail.com
 GitHub: https://github.com/TanjilHasan-Himel
 
