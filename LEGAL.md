@@ -1,7 +1,8 @@
 # Legal Disclaimer & Terms of Use
 
-**Effective Date:** November 9, 2026  
+**Effective Date:** November 17, 2026  
 **Product:** Audia Player (Android Application)  
+**Version:** 9.1.2  
 **Author & Copyright Holder:** Tanjil Hasan Himel ([tanjilhasanhimel.me](https://tanjilhasanhimel.me/))
 
 ---
@@ -35,26 +36,41 @@ By downloading, installing, or using the Audia Player application (`.apk`), you 
 
 ---
 
-## 3. Third-Party Content & Lyrics Disclaimer
+## 3. Third-Party Content & Features Disclaimer
 
 1. **User-Provided Audio Files:**  
    Audia Player functions as a local, offline audio rendering engine. It plays audio files already stored on the user's device. Audia Player does **not** host, store, index, scrape, or distribute audio tracks or copyrighted media. Users are solely responsible for ensuring they possess the legitimate rights to listen to the audio files stored on their devices.
 
-2. **Synchronized Lyrics (LRCLIB):**  
+2. **Persistent Playlists & File Operations:**  
+   The app provides local playlist creation and standard M3U/M3U8 import/export. File operations are handled securely via Android's Storage Access Framework (SAF).
+
+3. **Android Auto Integration:**  
+   Audia Player integrates with Android Auto via AndroidX Media3 `MediaLibraryService` for safe, distraction-free in-vehicle music browsing and playback.
+
+4. **Synchronized Lyrics (LRCLIB):**  
    The optional synchronized lyrics feature queries publicly accessible community lyrics APIs (such as LRCLIB). Lyrics text, translations, and synchronization data belong strictly to their respective authors and copyright holders. Audia Player acts purely as a client visualizer and does not claim ownership of any third-party lyric content.
 
-3. **Artist Artwork & Trademarks:**  
+5. **Internet Radio (Radio Browser):**  
+   Audia Player accesses community radio station directories provided by Radio Browser. Stream contents are hosted independently by radio broadcasters.
+
+6. **Artist Artwork & Trademarks:**  
    All artist names, album titles, cover artworks, and musical metadata displayed within the application or showcase screenshots belong to their respective copyright and trademark owners. They are referenced strictly for illustrative, demonstration, and fair-use descriptive purposes.
 
 ---
 
-## 4. Privacy & Data Integrity
+## 4. Privacy & Data Handling
 
-1. **Zero Telemetry:**  
-   Audia Player operates under a strict **Zero-Telemetry** principle. The application does not collect, record, log, or transmit personal data, listening habits, device identifiers, or usage analytics to any server.
+1. **Local-First Core:**  
+   All primary user data (playlists, listening history, favorites, equalizer presets, and custom A-B loops) is stored locally on your device and is never uploaded to any server.
 
-2. **Local Storage Operations:**  
-   All databases (including saved loop presets, favorites, offline lyrics cache, and sound equalizer curves) are stored exclusively in private sandbox storage on the local device and are completely destroyed upon application uninstallation.
+2. **In-App Update Engine:**  
+   The application periodically checks for official releases via a secure, anonymous GET request to Fastly CDN / GitHub releases. No device identifiers or personal information are transmitted during update checks.
+
+3. **Diagnostics & Telemetry:**  
+   To diagnose stability issues and crashes across diverse Android device configurations, Audia integrates Firebase Crashlytics. Users have full control and can toggle crash reporting and analytics ON or OFF at any time in **Settings > Diagnostics**.
+
+4. **Microphone / Record Audio Permission:**  
+   The `RECORD_AUDIO` permission is strictly used to capture real-time audio output frequency data for the live waveform visualizer in device RAM. No audio is ever recorded, saved to storage, or transmitted over the network.
 
 ---
 
@@ -69,7 +85,7 @@ IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGE
 ## 6. Trademarks & Attribution
 
 - **"Audia"**, the **Audia Triple-Arch Brand Mark**, and associated visual designs are proprietary identifiers belonging to **Tanjil Hasan Himel**.
-- Android, Google Play, and ExoPlayer are trademarks of Google LLC.
+- Android, Android Auto, Google Play, and ExoPlayer are trademarks of Google LLC.
 - Other product and company names mentioned herein may be the trademarks of their respective owners.
 
 ---
@@ -79,4 +95,4 @@ IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGE
 For professional inquiries, licensing questions, or security reports, please reach out via:
 - **Developer Website:** [tanjilhasanhimel.me](https://tanjilhasanhimel.me/)
 - **LinkedIn:** [linkedin.com/in/tanjilhasanhimel](https://www.linkedin.com/in/tanjilhasanhimel/)
-
+- **Email:** taanjilhasan@gmail.com

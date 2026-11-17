@@ -10,7 +10,7 @@
     <img src="https://img.shields.io/badge/⚡_Direct_Download-Audia_Latest_APK-gold?style=for-the-badge&logo=android&logoColor=white" height="42" alt="Direct Download Audia Latest APK">
   </a>
   <a href="https://github.com/TanjilHasan-Himel/app/releases">
-    <img src="https://img.shields.io/badge/Official_Releases-v9.1.0-blueviolet?style=for-the-badge&logo=github" height="42" alt="GitHub Releases">
+    <img src="https://img.shields.io/badge/Official_Releases-v9.1.2-blueviolet?style=for-the-badge&logo=github" height="42" alt="GitHub Releases">
   </a>
 </p>
 
@@ -193,7 +193,17 @@ Always fetches the most recent stable release directly:
 
 ## 📋 Changelog
 
-### Version 9.1.0 (Current Stable)
+### Version 9.1.2 (Current Stable - November 17, 2026)
+- **Brand Identity Play Controls:** Restored the iconic Audia Triple Arch logo mark directly on the central Play/Pause controls in idle/paused state across Full Player, MiniPlayer, and Zen Mode.
+- **Unified Production Signing:** Configured permanent production release keystore ensuring seamless, zero-conflict in-app updates without uninstallation.
+- **Modernized Legal & Privacy Alignment:** Updated EULA and Privacy Policy with full disclosures of Android Auto, persistent M3U playlists, telemetry toggles, and automated updates.
+
+### Version 9.1.1 (November 16, 2026)
+- **Persistent Custom Playlists:** Create, rename, delete, and manage custom playlists persisted in Room DB with instant M3U / M3U8 export and import.
+- **Android Auto Head Unit Integration:** Official AndroidX Media3 `MediaLibraryService` tree for safe, full car-display browsing and playback.
+- **Automated In-App Update Engine:** Background 24-hour update checks with direct download and gentle reminder alerts.
+
+### Version 9.1.0
 - **Modular 4-Piece Liquid Glass MiniPlayer:** Completely redesigned miniplayer into four independent translucent glass components with organic spring physics.
 - **Dynamic In-Button Liquid Progress Fill:** Replaced legacy bottom progress bars with an in-button theme-tinted gradient fill and glowing crest beam.
 - **Unified Travelling Light Beam:** Single continuous shimmer beam calculating global distance across all 4 pieces with dynamic edge flare.
@@ -212,8 +222,8 @@ Always fetches the most recent stable release directly:
 - [x] 5-Band Biquad DSP Equalizer with visual curve response
 - [x] Global Radio Browser streaming engine
 - [x] Scheduled Playback Alarm Engine
-- [ ] Real Android Auto Head Unit integration
-- [ ] M3U / M3U8 Playlist import & export
+- [x] Real Android Auto Head Unit integration
+- [x] M3U / M3U8 Playlist import & export
 - [ ] True Gapless Crossfade & ReplayGain loudness normalization
 - [ ] Tag Studio with Storage Access Framework (SAF) in-file saving
 - [ ] `.audia` portable single-file settings & queue backup
