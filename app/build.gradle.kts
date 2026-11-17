@@ -14,10 +14,21 @@ val vCode = providers.gradleProperty("AUDIA_VERSION_CODE")
     .getOrElse(versionProps["VERSION_CODE"].toString()).toInt()
 val vName = providers.gradleProperty("AUDIA_VERSION_NAME")
     .getOrElse(versionProps["VERSION_NAME"].toString())
+
+val keystorePropsFile = file("keystore/keystore.properties")
+val keystoreProps = Properties()
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(FileInputStream(keystorePropsFile))
+}
+
 val releaseStorePath = providers.environmentVariable("AUDIA_KEYSTORE_PATH").orNull
+    ?: keystoreProps.getProperty("storeFile") ?: "keystore/audia-release.jks"
 val releaseStorePassword = providers.environmentVariable("AUDIA_KEYSTORE_PASSWORD").orNull
+    ?: keystoreProps.getProperty("storePassword") ?: "audia_release_2026"
 val releaseKeyAlias = providers.environmentVariable("AUDIA_KEY_ALIAS").orNull
+    ?: keystoreProps.getProperty("keyAlias") ?: "audia"
 val releaseKeyPassword = providers.environmentVariable("AUDIA_KEY_PASSWORD").orNull
+    ?: keystoreProps.getProperty("keyPassword") ?: "audia_release_2026"
 
 plugins {
     alias(libs.plugins.android.application)
@@ -46,9 +57,10 @@ android {
     }
 
     signingConfigs {
-        if (listOf(releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { it != null }) {
+        val resolvedStore = file(releaseStorePath)
+        if (resolvedStore.exists() && releaseStorePassword != null && releaseKeyAlias != null && releaseKeyPassword != null) {
             create("release") {
-                storeFile = file(releaseStorePath!!)
+                storeFile = resolvedStore
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword
@@ -57,6 +69,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

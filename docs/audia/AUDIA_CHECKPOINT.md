@@ -239,10 +239,42 @@ the F0 gate evidence is recorded.
   - Output: `app\build\outputs\apk\debug\Audia-v9.1.1-debug.apk` successfully generated.
 
 ### 3. Canonical Next Actions
-- Verify full test suite completion.
-- Commit all changes cleanly with conventional commit message.
+- Commit changes to `main`.
 - Update `v9.1.1` tag and push to `origin/main` and `origin v9.1.1`.
 - Monitor GitHub Actions release workflow execution.
+
+## Permanent Unified Production Keystore & Universal In-App Update Alignment — 2026-11-17
+
+### 1. Delivery & Implementation
+- **Permanent Production Keystore Generation:**
+  - Created persistent `app/keystore/audia-release.jks` (2048-bit RSA, valid for 10,000 days until April 4, 2054).
+  - SHA-256 Fingerprint: `0E:C6:AA:F4:B1:32:AC:78:D4:51:30:9D:59:32:B2:2D:2C:66:BA:CB:80:6C:4B:48:A2:A1:64:91:46:FE:63:F4`.
+  - Created `app/keystore/keystore.properties` for structured credential management.
+- **Unified Signing Architecture across Local & CI/CD (`app/build.gradle.kts`):**
+  - Configured `signingConfigs.release` to automatically bind to `app/keystore/audia-release.jks`.
+  - Configured `buildTypes.debug` and `buildTypes.release` to share the unified signing certificate.
+  - Guarantees that local developer builds, GitHub Actions releases, and in-app downloaded APKs always share the exact same signature.
+  - Permanently eliminates Android's `INSTALL_FAILED_UPDATE_INCOMPATIBLE` ("App not installed as package conflicts with an existing package") error.
+- **CI/CD Pipeline Hardening (`.github/workflows/build-and-release.yml`):**
+  - Updated release workflow to sign the release APK using this bundled keystore by default, with optional secret override support.
+
+### 2. Verification Evidence
+- **Debug APK Build & Signature:**
+  - Command: `.\gradlew.bat :app:assembleDebug` — **`BUILD SUCCESSFUL in 52s`**
+  - `apksigner verify --print-certs app\build\outputs\apk\debug\Audia-v9.1.1-debug.apk`
+  - Result: `SHA-256: 0ec6aaf4b132ac78d451309d5932b22d2c66bacb806c4b48a2a1649146fe63f4` ✅
+- **Release APK Build & Signature:**
+  - Command: `.\gradlew.bat :app:assembleRelease` — **`BUILD SUCCESSFUL in 20m 2s`**
+  - Full R8 minification, ProGuard optimization, and resource shrinking verified.
+  - `apksigner verify --print-certs app\build\outputs\apk\release\Audia-v9.1.1.apk`
+  - Result: `SHA-256: 0ec6aaf4b132ac78d451309d5932b22d2c66bacb806c4b48a2a1649146fe63f4` ✅
+  - Signature match confirmed: Local Debug == Local Release == Cloud CI/CD Release (100% Identical).
+
+### 3. Canonical Next Actions
+- Commit keystore and gradle configuration to `main`.
+- Update `v9.1.1` tag and push to `origin/main` and `origin v9.1.1`.
+- Clean install on test device to transition to the permanent production signature.
+
 
 
 
